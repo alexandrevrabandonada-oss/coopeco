@@ -1,33 +1,51 @@
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #f2f2f2;
+  /* Concrete Light */
+  --foreground: #000000;
+  /* Stencil Black */
+  --primary: #fbbf24;
+  /* High-impact Yellow */
+  --primary-dark: #d97706;
+  --secondary: #404040;
+  /* Concrete Dark */
+  --accent: #991b1b;
+  /* Rust Red */
+  --muted: #d4d4d4;
+  /* Mid Gray */
+  --card: #ffffff;
+  --border: #1a1a1a;
+  /* Heavy Border */
+  --shadow: 4px 4px 0px rgba(0, 0, 0, 1);
+  /* Brutalist Shadow */
+  --safe-area-inset-bottom: env(safe-area-inset-bottom, 0px);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
-
-html,
-body {
-  max-width: 100vw;
-  overflow-x: hidden;
-}
-
-body {
-  color: var(--foreground);
-  background: var(--background);
-  font-family: Arial, Helvetica, sans-serif;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+[data-theme='dark'] {
+  --background: #1a1a1a;
+  --foreground: #f2f2f2;
+  --primary: #fbbf24;
+  --muted: #404040;
+  --card: #262626;
+  --border: #f2f2f2;
+  --shadow: 4px 4px 0px rgba(251, 191, 36, 0.4);
 }
 
 * {
   box-sizing: border-box;
   padding: 0;
   margin: 0;
+  -webkit-tap-highlight-color: transparent;
+}
+
+html,
+body {
+  width: 100%;
+  min-height: 100vh;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+  background-color: var(--background);
+  color: var(--foreground);
+  transition: background-color 0.2s ease, color 0.2s ease;
+  overflow-x: hidden;
 }
 
 a {
@@ -35,8 +53,155 @@ a {
   text-decoration: none;
 }
 
-@media (prefers-color-scheme: dark) {
-  html {
-    color-scheme: dark;
+button {
+  cursor: pointer;
+  border: none;
+  background: none;
+  font-family: inherit;
+}
+
+/* Responsive Wrapper */
+.app-wrapper {
+  width: 100%;
+  max-width: 1200px;
+  margin: 0 auto;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  padding-bottom: calc(80px + var(--safe-area-inset-bottom));
+  position: relative;
+}
+
+.main-content {
+  flex: 1;
+  padding: 1.5rem;
+}
+
+/* Industrial Components */
+.card {
+  background: var(--card);
+  border: 2px solid var(--border);
+  padding: 1.5rem;
+  box-shadow: var(--shadow);
+  margin-bottom: 1.5rem;
+  border-radius: 0;
+  /* Stencil look is rectangular */
+}
+
+.bottom-nav {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: calc(70px + var(--safe-area-inset-bottom));
+  display: flex;
+  justify-content: space-around;
+  align-items: center;
+  z-index: 100;
+  padding-bottom: var(--safe-area-inset-bottom);
+  background: var(--foreground);
+  color: var(--background);
+  border-top: 4px solid var(--primary);
+}
+
+.nav-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--muted);
+  transition: all 0.2s ease;
+}
+
+.nav-item.active {
+  color: var(--primary);
+}
+
+.nav-item svg {
+  width: 24px;
+  height: 24px;
+}
+
+.cta-button {
+  background: var(--primary);
+  color: var(--foreground);
+  padding: 1rem 2rem;
+  border: 2px solid var(--foreground);
+  font-weight: 900;
+  text-transform: uppercase;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  box-shadow: 6px 6px 0px var(--foreground);
+  transition: all 0.1s ease;
+  cursor: pointer;
+}
+
+.cta-button:active {
+  transform: translate(2px, 2px);
+  box-shadow: 4px 4px 0px var(--foreground);
+}
+
+.header {
+  padding: 1.5rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: var(--background);
+  border-bottom: 2px solid var(--border);
+}
+
+.logo {
+  font-size: 2rem;
+  font-weight: 900;
+  color: var(--foreground);
+  letter-spacing: -2px;
+  text-transform: uppercase;
+  background: var(--primary);
+  padding: 0 8px;
+  border: 2px solid var(--foreground);
+}
+
+/* Breakpoints */
+@media (min-width: 768px) {
+  .main-content {
+    padding: 3rem;
   }
+
+  .bottom-nav {
+    width: fit-content;
+    left: 50%;
+    transform: translateX(-50%);
+    bottom: 2rem;
+    border-radius: 4px;
+    padding: 0 2rem;
+    border: 2px solid var(--primary);
+  }
+}
+
+/* Stencil Text Effects */
+.stencil-text {
+  text-transform: uppercase;
+  font-weight: 900;
+  letter-spacing: 0.05em;
+}
+
+/* Animations */
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-slide-up {
+  animation: slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
