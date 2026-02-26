@@ -1,13 +1,86 @@
 "use client"
 
+import { useEffect, useMemo, useState } from "react"
 import { useAuth } from "@/contexts/auth-context"
 import { LoginForm } from "@/components/login-form"
 import { ProfileOnboarding } from "@/components/profile-onboarding"
 import { Loader2, LogOut, User as UserIcon, MapPin, Shield, Recycle } from "lucide-react"
 import Link from "next/link"
+import { createClient } from "@/lib/supabase"
+import { PickupAddressProfile } from "@/types/eco"
 
 export default function Perfil() {
     const { user, profile, isLoading, signOut } = useAuth()
+    const supabase = useMemo(() => createClient(), [])
+    const [addressFull, setAddressFull] = useState("")
+    const [contactPhone, setContactPhone] = useState("")
+    const [isAddressLoading, setIsAddressLoading] = useState(false)
+    const [isAddressSaving, setIsAddressSaving] = useState(false)
+    const [addressMessage, setAddressMessage] = useState<string | null>(null)
+    const [recurringAlertCount, setRecurringAlertCount] = useState(0)
+    const p = profile as { display_name?: string; role: string; neighborhood?: { name: string } } | null
+
+    useEffect(() => {
+        const run = async () => {
+            if (!user || profile?.role !== "resident") return
+            setIsAddressLoading(true)
+            setAddressMessage(null)
+            const [{ data, error }, { count }] = await Promise.all([
+                supabase
+                    .from("pickup_address_profiles")
+                    .select("user_id, address_full, contact_phone")
+                    .eq("user_id", user.id)
+                    .maybeSingle<PickupAddressProfile>(),
+                supabase
+                    .from("user_notifications")
+                    .select("id", { count: "exact", head: true })
+                    .eq("user_id", user.id)
+                    .eq("kind", "recurring_skipped_invalid")
+                    .eq("is_read", false),
+            ])
+
+            if (error) {
+                setAddressMessage(error.message)
+            } else if (data) {
+                setAddressFull(data.address_full || "")
+                setContactPhone(data.contact_phone || "")
+            }
+            setRecurringAlertCount(count || 0)
+            setIsAddressLoading(false)
+        }
+        run()
+    }, [user, profile?.role, supabase])
+
+    const saveAddressProfile = async () => {
+        if (!user) return
+        if (!addressFull.trim()) {
+            setAddressMessage("Informe o endereço para recorrência doorstep.")
+            return
+        }
+        setIsAddressSaving(true)
+        setAddressMessage(null)
+        const { error } = await supabase.from("pickup_address_profiles").upsert(
+            {
+                user_id: user.id,
+                address_full: addressFull.trim(),
+                contact_phone: contactPhone.trim() || null,
+            },
+            { onConflict: "user_id" },
+        )
+        if (error) {
+            setAddressMessage(error.message)
+        } else {
+            setAddressMessage("Endereço de coleta salvo.")
+        }
+        const { count } = await supabase
+            .from("user_notifications")
+            .select("id", { count: "exact", head: true })
+            .eq("user_id", user.id)
+            .eq("kind", "recurring_skipped_invalid")
+            .eq("is_read", false)
+        setRecurringAlertCount(count || 0)
+        setIsAddressSaving(false)
+    }
 
     if (isLoading) {
         return (
@@ -21,12 +94,9 @@ export default function Perfil() {
         return <LoginForm />
     }
 
-    if (!profile) {
+    if (!profile || !p) {
         return <ProfileOnboarding onComplete={() => window.location.reload()} />
     }
-
-    // Profile Data
-    const p = profile as { display_name?: string; role: string; neighborhood?: { name: string } };
 
     return (
         <div className="animate-slide-up">
@@ -70,6 +140,55 @@ export default function Perfil() {
                 </div>
             </div>
 
+            {p.role === "resident" && (
+                <div className="card mt-6">
+                    {recurringAlertCount > 0 && (
+                        <div className="border-2 border-accent bg-white p-3 mb-4">
+                            <p className="font-black text-xs uppercase">
+                                Você tem {recurringAlertCount} alerta(s) de recorrência para resolver.
+                            </p>
+                            <p className="font-bold text-xs uppercase mb-2">
+                                Atualize seu endereço para evitar skipped_invalid na próxima geração.
+                            </p>
+                            <Link href="/notificacoes" className="cta-button small inline-flex">
+                                Ver notificações
+                            </Link>
+                        </div>
+                    )}
+                    <h3 className="stencil-text mb-4" style={{ fontSize: "1.1rem" }}>
+                        Endereço de Coleta (Recorrência Doorstep)
+                    </h3>
+                    {isAddressLoading ? (
+                        <p className="font-bold text-xs uppercase">Carregando endereço...</p>
+                    ) : (
+                        <div id="endereco-coleta" className="flex flex-col gap-3">
+                            <textarea
+                                value={addressFull}
+                                onChange={(event) => setAddressFull(event.target.value)}
+                                className="w-full p-4 border-2 border-foreground bg-white font-bold outline-none h-24"
+                                placeholder="Rua, número e complemento (privado)"
+                            />
+                            <input
+                                value={contactPhone}
+                                onChange={(event) => setContactPhone(event.target.value)}
+                                className="w-full p-4 border-2 border-foreground bg-white font-bold outline-none"
+                                placeholder="Telefone de contato"
+                            />
+                            <button
+                                onClick={saveAddressProfile}
+                                disabled={isAddressSaving}
+                                className="cta-button w-full justify-center"
+                            >
+                                {isAddressSaving ? "Salvando..." : "Salvar meu endereço de coleta"}
+                            </button>
+                            {addressMessage && (
+                                <p className="font-bold text-xs uppercase">{addressMessage}</p>
+                            )}
+                        </div>
+                    )}
+                </div>
+            )}
+
             <div style={{ marginTop: '2rem' }}>
                 <h3 className="stencil-text mb-4" style={{ fontSize: '1.25rem' }}>Ações Rápidas</h3>
                 <div className="flex flex-col gap-3">
@@ -80,6 +199,10 @@ export default function Perfil() {
                     <Link href="/recibos" className="cta-button w-full justify-between" style={{ background: 'white' }}>
                         MEUS RECIBOS ECO
                         <Shield size={20} />
+                    </Link>
+                    <Link href="/recorrencia" className="cta-button w-full justify-between" style={{ background: 'white' }}>
+                        MINHA RECORRÊNCIA
+                        <Recycle size={20} />
                     </Link>
                     {['cooperado', 'operator'].includes(p.role) && (
                         <Link href="/cooperado" className="cta-button w-full justify-between" style={{ background: 'var(--accent)', color: 'white' }}>

@@ -1,11 +1,12 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase"
 import { useAuth } from "@/contexts/auth-context"
 import { Recycle, Plus, Trash2, ArrowRight, ArrowLeft, Loader2, Clock, MapPin } from "lucide-react"
-import { Profile } from "@/types/eco"
+import { EcoDropPoint, Profile, RouteWindow } from "@/types/eco"
+import { formatWindowLabel, getNextWindowOccurrence } from "@/lib/route-windows"
 
 type Item = {
     material: string
@@ -26,6 +27,57 @@ export default function PedirColeta() {
     const [phone, setPhone] = useState("")
     const [isSubmitting, setIsSubmitting] = useState(false)
     const [errorMessage, setErrorMessage] = useState("")
+    const [windows, setWindows] = useState<RouteWindow[]>([])
+    const [selectedWindowId, setSelectedWindowId] = useState("")
+    const [isLoadingWindows, setIsLoadingWindows] = useState(false)
+    const [dropPoints, setDropPoints] = useState<EcoDropPoint[]>([])
+    const [selectedDropPointId, setSelectedDropPointId] = useState("")
+    const [fulfillmentMode, setFulfillmentMode] = useState<"doorstep" | "drop_point">("doorstep")
+    const p = profile as Profile
+    const supabase = useMemo(() => createClient(), [])
+
+    useEffect(() => {
+        const run = async () => {
+            if (!p?.neighborhood_id) return
+            setIsLoadingWindows(true)
+            const { data, error } = await supabase
+                .from("route_windows")
+                .select("*")
+                .eq("neighborhood_id", p.neighborhood_id)
+                .eq("active", true)
+                .order("weekday", { ascending: true })
+                .order("start_time", { ascending: true })
+
+            if (error) {
+                setErrorMessage("Não foi possível carregar as janelas do bairro.")
+            } else {
+                const safe = (data || []) as RouteWindow[]
+                setWindows(safe)
+                if (safe.length > 0) {
+                    const orderedByNext = [...safe].sort(
+                        (a, b) =>
+                            getNextWindowOccurrence(a).getTime() - getNextWindowOccurrence(b).getTime(),
+                    )
+                    setSelectedWindowId(orderedByNext[0].id)
+                }
+            }
+            setIsLoadingWindows(false)
+
+            const { data: pointsData, error: pointsError } = await supabase
+                .from("eco_drop_points")
+                .select("*")
+                .eq("neighborhood_id", p.neighborhood_id)
+                .eq("active", true)
+                .order("created_at", { ascending: false })
+            if (!pointsError) {
+                const safePoints = (pointsData || []) as EcoDropPoint[]
+                setDropPoints(safePoints)
+                if (safePoints.length > 0) setSelectedDropPointId(safePoints[0].id)
+            }
+        }
+
+        run()
+    }, [p?.neighborhood_id, supabase])
 
     if (!user || !profile || profile.role !== 'resident') {
         return (
@@ -36,8 +88,6 @@ export default function PedirColeta() {
             </div>
         )
     }
-
-    const p = profile as Profile
 
     const addItem = () => {
         if (items.length >= MAX_ITEMS_PER_REQUEST) {
@@ -69,18 +119,41 @@ export default function PedirColeta() {
             setErrorMessage(`Máximo de ${MAX_ITEMS_PER_REQUEST} itens por pedido.`)
             return
         }
+        if (fulfillmentMode === "drop_point" && !selectedDropPointId) {
+            setErrorMessage("Selecione um Ponto ECO para entrega.")
+            return
+        }
+        if (fulfillmentMode === "doorstep" && (!address.trim() || !phone.trim())) {
+            setErrorMessage("Endereço e telefone são obrigatórios para retirada em casa.")
+            return
+        }
 
         setIsSubmitting(true)
-        const supabase = createClient()
-
         try {
+            const selectedWindow = windows.find((window) => window.id === selectedWindowId) || null
+            let scheduledFor = selectedWindow ? getNextWindowOccurrence(selectedWindow).toISOString() : null
+            if (selectedWindow) {
+                const { data: nextOccurrence } = await supabase.rpc("eco_next_occurrence", {
+                    weekday: selectedWindow.weekday,
+                    start_time: selectedWindow.start_time,
+                    tz: "America/Sao_Paulo",
+                })
+                if (nextOccurrence) {
+                    scheduledFor = new Date(nextOccurrence as string).toISOString()
+                }
+            }
+
             // 1. Create Pickup Request
             const { data: request, error: reqError } = await supabase
                 .from("pickup_requests")
                 .insert({
                     created_by: user.id,
                     neighborhood_id: p.neighborhood_id!,
-                    notes: notes
+                    notes: notes,
+                    route_window_id: selectedWindow?.id ?? null,
+                    scheduled_for: scheduledFor,
+                    fulfillment_mode: fulfillmentMode,
+                    drop_point_id: fulfillmentMode === "drop_point" ? selectedDropPointId : null,
                 })
                 .select()
                 .single()
@@ -100,15 +173,16 @@ export default function PedirColeta() {
             if (itemsError) throw itemsError
 
             // 3. Insert Private Data
-            const { error: privateError } = await supabase
-                .from("pickup_request_private")
-                .insert({
-                    request_id: request.id,
-                    address_full: address,
-                    contact_phone: phone
-                })
-
-            if (privateError) throw privateError
+            if (fulfillmentMode === "doorstep") {
+                const { error: privateError } = await supabase
+                    .from("pickup_request_private")
+                    .insert({
+                        request_id: request.id,
+                        address_full: address,
+                        contact_phone: phone
+                    })
+                if (privateError) throw privateError
+            }
 
             router.push('/pedidos')
         } catch (err) {
@@ -225,31 +299,126 @@ export default function PedirColeta() {
                     <h2 className="stencil-text text-xl mb-4">2. QUANDO E ONDE?</h2>
                     <div className="flex flex-col gap-6">
                         <div className="card flex flex-col gap-2">
-                            <label className="stencil-text text-sm flex items-center gap-2">
-                                <MapPin size={16} /> ENDEREÇO COMPLETO
-                            </label>
-                            <textarea
-                                required
-                                value={address}
-                                onChange={(e) => setAddress(e.target.value)}
-                                className="w-full p-4 border-2 border-foreground bg-white font-bold outline-none h-24"
-                                placeholder="RUA, NÚMERO, APTO/BLOCO..."
-                            />
+                            <label className="stencil-text text-sm">MODO DE ATENDIMENTO</label>
+                            <div className="flex flex-wrap gap-2">
+                                <button
+                                    type="button"
+                                    className="cta-button small"
+                                    style={{ background: fulfillmentMode === "doorstep" ? "var(--primary)" : "white" }}
+                                    onClick={() => setFulfillmentMode("doorstep")}
+                                >
+                                    Retirada em casa
+                                </button>
+                                <button
+                                    type="button"
+                                    className="cta-button small"
+                                    style={{ background: fulfillmentMode === "drop_point" ? "var(--primary)" : "white" }}
+                                    onClick={() => setFulfillmentMode("drop_point")}
+                                >
+                                    Entregar em Ponto
+                                </button>
+                            </div>
                         </div>
-
                         <div className="card flex flex-col gap-2">
                             <label className="stencil-text text-sm flex items-center gap-2">
-                                <Clock size={16} /> TELEFONE PARA CONTATO
+                                <Clock size={16} /> JANELA DA ROTA (DEFAULT: PRÓXIMA DISPONÍVEL)
                             </label>
-                            <input
-                                type="tel"
-                                required
-                                value={phone}
-                                onChange={(e) => setPhone(e.target.value)}
-                                className="w-full p-4 border-2 border-foreground bg-white font-bold outline-none"
-                                placeholder="(00) 00000-0000"
-                            />
+                            {isLoadingWindows ? (
+                                <p className="font-bold uppercase text-xs">Carregando janelas...</p>
+                            ) : windows.length === 0 ? (
+                                <div className="border-2 border-dashed border-foreground p-3 bg-white">
+                                    <p className="font-black text-xs uppercase">
+                                        Bairro ainda sem rota; use on-demand temporário.
+                                    </p>
+                                </div>
+                            ) : (
+                                <div className="flex flex-col gap-2">
+                                    {windows
+                                        .slice()
+                                        .sort(
+                                            (a, b) =>
+                                                getNextWindowOccurrence(a).getTime() -
+                                                getNextWindowOccurrence(b).getTime(),
+                                        )
+                                        .slice(0, 3)
+                                        .map((window) => {
+                                            const nextAt = getNextWindowOccurrence(window)
+                                            return (
+                                                <label
+                                                    key={window.id}
+                                                    className="border-2 border-foreground p-3 bg-white flex items-center gap-2"
+                                                >
+                                                    <input
+                                                        type="radio"
+                                                        name="route_window"
+                                                        value={window.id}
+                                                        checked={selectedWindowId === window.id}
+                                                        onChange={(event) => setSelectedWindowId(event.target.value)}
+                                                    />
+                                                    <span className="font-black uppercase text-xs">
+                                                        {formatWindowLabel(window)} | Próxima:{" "}
+                                                        {nextAt.toLocaleString("pt-BR")}
+                                                    </span>
+                                                </label>
+                                            )
+                                        })}
+                                </div>
+                            )}
                         </div>
+
+                        {fulfillmentMode === "doorstep" ? (
+                            <>
+                                <div className="card flex flex-col gap-2">
+                                    <label className="stencil-text text-sm flex items-center gap-2">
+                                        <MapPin size={16} /> ENDEREÇO COMPLETO
+                                    </label>
+                                    <textarea
+                                        required
+                                        value={address}
+                                        onChange={(e) => setAddress(e.target.value)}
+                                        className="w-full p-4 border-2 border-foreground bg-white font-bold outline-none h-24"
+                                        placeholder="RUA, NÚMERO, APTO/BLOCO..."
+                                    />
+                                </div>
+
+                                <div className="card flex flex-col gap-2">
+                                    <label className="stencil-text text-sm flex items-center gap-2">
+                                        <Clock size={16} /> TELEFONE PARA CONTATO
+                                    </label>
+                                    <input
+                                        type="tel"
+                                        required
+                                        value={phone}
+                                        onChange={(e) => setPhone(e.target.value)}
+                                        className="w-full p-4 border-2 border-foreground bg-white font-bold outline-none"
+                                        placeholder="(00) 00000-0000"
+                                    />
+                                </div>
+                            </>
+                        ) : (
+                            <div className="card flex flex-col gap-2">
+                                <label className="stencil-text text-sm flex items-center gap-2">
+                                    <MapPin size={16} /> PONTO ECO
+                                </label>
+                                {dropPoints.length === 0 ? (
+                                    <p className="font-black text-xs uppercase">
+                                        Sem Ponto ECO ativo no bairro. Volte para retirada em casa.
+                                    </p>
+                                ) : (
+                                    <select
+                                        className="w-full p-4 border-2 border-foreground bg-white font-bold outline-none"
+                                        value={selectedDropPointId}
+                                        onChange={(e) => setSelectedDropPointId(e.target.value)}
+                                    >
+                                        {dropPoints.map((point) => (
+                                            <option key={point.id} value={point.id}>
+                                                {point.name} | {point.address_public} | {point.hours}
+                                            </option>
+                                        ))}
+                                    </select>
+                                )}
+                            </div>
+                        )}
 
                         <div className="card flex flex-col gap-2">
                             <label className="stencil-text text-sm">OBSERVAÇÕES (OPCIONAL)</label>
@@ -286,7 +455,21 @@ export default function PedirColeta() {
                         </ul>
                         <div className="mt-4 pt-4 border-t-2 border-foreground">
                             <p className="font-black text-xs uppercase mb-1">LOCAL DE COLETA:</p>
-                            <p className="font-bold uppercase text-sm">{address}</p>
+                            <p className="font-bold uppercase text-sm">
+                                {fulfillmentMode === "doorstep"
+                                    ? address
+                                    : (dropPoints.find((point) => point.id === selectedDropPointId)?.name || "PONTO ECO")}
+                            </p>
+                        </div>
+                        <div className="mt-4 pt-4 border-t-2 border-foreground">
+                            <p className="font-black text-xs uppercase mb-1">JANELA:</p>
+                            <p className="font-bold uppercase text-sm">
+                                {(() => {
+                                    const selectedWindow = windows.find((window) => window.id === selectedWindowId)
+                                    if (!selectedWindow) return "ON-DEMAND TEMPORÁRIO (SEM JANELA NO BAIRRO)"
+                                    return `${formatWindowLabel(selectedWindow)}`
+                                })()}
+                            </p>
                         </div>
                     </div>
 

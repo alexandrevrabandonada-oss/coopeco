@@ -8,6 +8,7 @@ import { Loader2, Heart, MessageCircle, Share2, Shield, User, MapPin, ExternalLi
 import Link from "next/link"
 import { MediaPreview } from "@/components/media-preview"
 import { getSignedUrlsForEntity, type MediaEntityType } from "@/lib/storage-helpers"
+import { NeighborhoodErrorsWidget } from "@/components/neighborhood-errors-widget"
 
 export default function Mural() {
     const { profile } = useAuth()
@@ -18,6 +19,7 @@ export default function Mural() {
     const supabase = useMemo(() => createClient(), [])
 
     const p = profile as Profile
+    const isLearnEnabled = (process.env.NEXT_PUBLIC_ECO_FEATURES_LEARN ?? process.env.ECO_FEATURES_LEARN ?? "false").toLowerCase() === "true"
 
     const loadMural = useCallback(async () => {
         setIsLoading(true)
@@ -115,6 +117,12 @@ export default function Mural() {
 
     if (isLoading) return <div className="flex justify-center py-20"><Loader2 className="animate-spin text-primary" size={48} /></div>
 
+    const qualityLabelMap = {
+        ok: "OK",
+        attention: "ATENCAO",
+        contaminated: "CONTAMINADO",
+    } as const
+
     return (
         <div className="animate-slide-up pb-12">
             <div className="flex justify-between items-end mb-8">
@@ -129,6 +137,9 @@ export default function Mural() {
             </div>
 
             <div className="flex flex-col gap-8">
+                {isLearnEnabled && (
+                    <NeighborhoodErrorsWidget neighborhoodId={p?.neighborhood_id} compact />
+                )}
                 {posts.map((post) => (
                     <div key={post.id} className="card p-0 overflow-hidden">
                         {/* Header */}
@@ -168,6 +179,17 @@ export default function Mural() {
 
                                     <p className="font-bold text-sm">
                                         {post.receipt.request?.resident?.display_name} e {post.author?.display_name} geraram impacto real!
+                                    </p>
+
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-[10px] font-black uppercase text-muted">QUALIDADE:</span>
+                                        <span className="text-[10px] font-black uppercase border border-foreground px-2 py-1">
+                                            {qualityLabelMap[(post.receipt.quality_status || "ok") as keyof typeof qualityLabelMap]}
+                                        </span>
+                                    </div>
+
+                                    <p className="text-xs font-bold uppercase text-muted">
+                                        COMO MELHORAR: LIMPE E SEPARE POR MATERIAL PARA AUMENTAR O VALOR DO RECICLAVEL.
                                     </p>
 
                                     <Link href={`/recibos/${post.receipt.id}`} className="flex items-center gap-2 text-[10px] font-black uppercase underline">

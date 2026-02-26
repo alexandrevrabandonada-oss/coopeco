@@ -9,6 +9,13 @@ import { MediaUpload } from "@/components/media-upload"
 import { PickupRequest } from "@/types/eco"
 import { uploadMediaFiles } from "@/lib/storage-helpers"
 
+const QUALITY_FLAGS = [
+    { value: "food", label: "RESIDUO ORGANICO" },
+    { value: "liquids", label: "LIQUIDOS" },
+    { value: "mixed", label: "MISTURA DE MATERIAIS" },
+    { value: "sharp", label: "MATERIAL CORTANTE" },
+] as const
+
 export default function GerenciarColeta({ params }: { params: Promise<{ id: string }> }) {
     const { id } = use(params)
     const router = useRouter()
@@ -18,6 +25,9 @@ export default function GerenciarColeta({ params }: { params: Promise<{ id: stri
     const [isUpdating, setIsUpdating] = useState(false)
     const [selectedFiles, setSelectedFiles] = useState<File[]>([])
     const [receiptNotes, setReceiptNotes] = useState("")
+    const [qualityStatus, setQualityStatus] = useState<"ok" | "attention" | "contaminated">("ok")
+    const [qualityNotes, setQualityNotes] = useState("")
+    const [contaminationFlags, setContaminationFlags] = useState<string[]>([])
     const supabase = useMemo(() => createClient(), [])
 
     const makeReceiptCode = () =>
@@ -77,7 +87,10 @@ export default function GerenciarColeta({ params }: { params: Promise<{ id: stri
                     request_id: id,
                     cooperado_id: user?.id,
                     receipt_code: makeReceiptCode(),
-                    final_notes: receiptNotes
+                    final_notes: receiptNotes,
+                    quality_status: qualityStatus,
+                    quality_notes: qualityNotes || null,
+                    contamination_flags: contaminationFlags.length > 0 ? contaminationFlags : null,
                 })
                 .select()
                 .single()
@@ -90,9 +103,12 @@ export default function GerenciarColeta({ params }: { params: Promise<{ id: stri
             if (uploadedMedia.length > 0) {
                 const { error: updateReceiptMediaError } = await supabase
                     .from("receipts")
-                    .update({
+                        .update({
                         proof_photo_path: uploadedMedia[0].path,
                         final_notes: receiptNotes,
+                        quality_status: qualityStatus,
+                        quality_notes: qualityNotes || null,
+                        contamination_flags: contaminationFlags.length > 0 ? contaminationFlags : null,
                     })
                     .eq("id", receipt.id)
 
@@ -209,6 +225,52 @@ export default function GerenciarColeta({ params }: { params: Promise<{ id: stri
                                             onChange={(e) => setReceiptNotes(e.target.value)}
                                             className="w-full p-3 border-2 border-foreground bg-white font-bold outline-none text-sm h-20"
                                             placeholder="EX: TUDO SEPARADO CORRETAMENTE."
+                                        />
+                                    </div>
+
+                                    <div className="mt-4">
+                                        <label className="text-[10px] font-black uppercase block mb-1">QUALIDADE</label>
+                                        <select
+                                            value={qualityStatus}
+                                            onChange={(e) => setQualityStatus(e.target.value as "ok" | "attention" | "contaminated")}
+                                            className="w-full p-3 border-2 border-foreground bg-white font-black outline-none text-xs uppercase"
+                                            aria-label="Qualidade"
+                                        >
+                                            <option value="ok">OK</option>
+                                            <option value="attention">ATENCAO</option>
+                                            <option value="contaminated">CONTAMINADO</option>
+                                        </select>
+                                    </div>
+
+                                    <div className="mt-4">
+                                        <label className="text-[10px] font-black uppercase block mb-2">FLAGS RAPIDAS</label>
+                                        <div className="grid grid-cols-1 gap-2">
+                                            {QUALITY_FLAGS.map((flag) => (
+                                                <label key={flag.value} className="flex items-center gap-2 text-[10px] font-black uppercase">
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={contaminationFlags.includes(flag.value)}
+                                                        onChange={(e) => {
+                                                            if (e.target.checked) {
+                                                                setContaminationFlags((curr) => [...curr, flag.value])
+                                                                return
+                                                            }
+                                                            setContaminationFlags((curr) => curr.filter((item) => item !== flag.value))
+                                                        }}
+                                                    />
+                                                    {flag.label}
+                                                </label>
+                                            ))}
+                                        </div>
+                                    </div>
+
+                                    <div className="mt-4">
+                                        <label className="text-[10px] font-black uppercase block mb-1">NOTA DE QUALIDADE (OPCIONAL)</label>
+                                        <textarea
+                                            value={qualityNotes}
+                                            onChange={(e) => setQualityNotes(e.target.value)}
+                                            className="w-full p-3 border-2 border-foreground bg-white font-bold outline-none text-sm h-20"
+                                            placeholder="EX: ENXAGUAR EMBALAGENS E SEPARAR VIDRO."
                                         />
                                     </div>
                                 </div>

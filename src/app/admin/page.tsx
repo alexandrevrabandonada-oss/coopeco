@@ -7,6 +7,10 @@ import { Loader2, Map, Shield, AlertTriangle, ArrowRight } from "lucide-react"
 import Link from "next/link"
 
 export default function AdminDashboard() {
+    const isPilotEnabled = (process.env.NEXT_PUBLIC_ECO_FEATURES_PILOT ?? process.env.ECO_FEATURES_PILOT ?? "false").toLowerCase() === "true"
+    const isAnchorsEnabled = (process.env.NEXT_PUBLIC_ECO_FEATURES_ANCHORS ?? process.env.ECO_FEATURES_ANCHORS ?? "false").toLowerCase() === "true"
+    const isGalpaoEnabled = (process.env.NEXT_PUBLIC_ECO_FEATURES_GALPAO ?? process.env.ECO_FEATURES_GALPAO ?? "false").toLowerCase() === "true"
+    const isGovEnabled = (process.env.NEXT_PUBLIC_ECO_FEATURES_GOV ?? process.env.ECO_FEATURES_GOV ?? "false").toLowerCase() === "true"
     const [neighborhoods, setNeighborhoods] = useState<NeighborhoodRank[]>([])
     const [partners, setPartners] = useState<PartnerRank[]>([])
     const [isLoading, setIsLoading] = useState(true)
@@ -32,6 +36,41 @@ export default function AdminDashboard() {
             <h1 className="stencil-text mb-8" style={{ fontSize: '3rem', background: 'var(--primary)', padding: '0 12px', border: '4px solid var(--foreground)', width: 'fit-content' }}>
                 ADMIN
             </h1>
+            <div className="mb-8">
+                <div className="flex gap-2 flex-wrap">
+                    <Link href="/admin/rotas" className="cta-button" style={{ width: "fit-content" }}>
+                        ABRIR ADMIN / ROTAS <ArrowRight size={18} />
+                    </Link>
+                    <Link href="/admin/pontos" className="cta-button" style={{ width: "fit-content", background: "white" }}>
+                        ABRIR ADMIN / PONTOS <ArrowRight size={18} />
+                    </Link>
+                    {isAnchorsEnabled && (
+                        <Link href="/admin/ancoras" className="cta-button" style={{ width: "fit-content", background: "var(--secondary)", color: "white" }}>
+                            ABRIR ADMIN / ÂNCORAS <ArrowRight size={18} />
+                        </Link>
+                    )}
+                    {isGalpaoEnabled && (
+                        <Link href="/admin/galpao" className="cta-button" style={{ width: "fit-content", background: "var(--accent)", color: "white" }}>
+                            ABRIR ADMIN / GALPÃO <ArrowRight size={18} />
+                        </Link>
+                    )}
+                    {isGovEnabled && (
+                        <Link href="/admin/governanca" className="cta-button" style={{ width: "fit-content", background: "#0f766e", color: "white" }}>
+                            ABRIR ADMIN / GOVERNANÇA <ArrowRight size={18} />
+                        </Link>
+                    )}
+                    {isPilotEnabled && (
+                        <>
+                            <Link href="/admin/piloto" className="cta-button" style={{ width: "fit-content", background: "var(--secondary)", color: "white" }}>
+                                ABRIR ADMIN / PILOTO <ArrowRight size={18} />
+                            </Link>
+                            <Link href="/admin/operacao" className="cta-button" style={{ width: "fit-content", background: "var(--accent)", color: "white" }}>
+                                ABRIR ADMIN / OPERAÇÃO <ArrowRight size={18} />
+                            </Link>
+                        </>
+                    )}
+                </div>
+            </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-12">
                 <section>

@@ -5,8 +5,9 @@ import { createClient } from "@/lib/supabase"
 import { Loader2, ArrowLeft, Shield, Calendar, User, MapPin } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { MediaPreview } from "@/components/media-preview"
-import { MediaObject, Receipt } from "@/types/eco"
+import { EduTip, MediaObject, Receipt, ReceiptTip } from "@/types/eco"
 import { getSignedUrlsForEntity } from "@/lib/storage-helpers"
+import { NeighborhoodErrorsWidget } from "@/components/neighborhood-errors-widget"
 
 export default function ReciboDetalhes({ params }: { params: Promise<{ id: string }> }) {
     const { id } = use(params)
@@ -23,6 +24,12 @@ export default function ReciboDetalhes({ params }: { params: Promise<{ id: strin
             .from("receipts")
             .select(`
         *,
+        receipt_tip(
+          receipt_id,
+          tip_id,
+          created_at,
+          tip:edu_tips(id, slug, title, body, locale, active)
+        ),
         request:pickup_requests(
           *,
           resident:profiles!pickup_requests_created_by_fkey(display_name),
@@ -70,6 +77,24 @@ export default function ReciboDetalhes({ params }: { params: Promise<{ id: strin
 
     if (isLoading) return <div className="flex justify-center py-20"><Loader2 className="animate-spin text-primary" size={48} /></div>
     if (!receipt) return <div className="p-8 text-center font-black">RECIBO NÃO ENCONTRADO</div>
+
+    const qualityLabelMap = {
+        ok: "OK",
+        attention: "ATENCAO",
+        contaminated: "CONTAMINADO",
+    } as const
+
+    const qualityColorMap = {
+        ok: "var(--accent)",
+        attention: "var(--secondary)",
+        contaminated: "#b91c1c",
+    } as const
+
+    const qualityStatus = receipt.quality_status || "ok"
+    const tipSource = receipt.receipt_tip
+    const tipRow = Array.isArray(tipSource) ? tipSource[0] : tipSource
+    const tip = (tipRow as ReceiptTip | null)?.tip as EduTip | null
+    const isLearnEnabled = (process.env.NEXT_PUBLIC_ECO_FEATURES_LEARN ?? process.env.ECO_FEATURES_LEARN ?? "false").toLowerCase() === "true"
 
     return (
         <div className="animate-slide-up pb-12">
@@ -124,6 +149,25 @@ export default function ReciboDetalhes({ params }: { params: Promise<{ id: strin
                         </div>
 
                         <div className="border-t-2 border-dashed border-foreground/20 pt-4">
+                            <span className="text-[10px] font-black uppercase text-muted">QUALIDADE</span>
+                            <div className="mt-2 inline-flex items-center px-3 py-2 border-2 border-foreground">
+                                <span className="font-black text-xs uppercase" style={{ color: qualityColorMap[qualityStatus] }}>
+                                    {qualityLabelMap[qualityStatus]}
+                                </span>
+                            </div>
+                            {receipt.contamination_flags && receipt.contamination_flags.length > 0 && (
+                                <p className="text-xs font-bold mt-2 uppercase">
+                                    FLAGS: {receipt.contamination_flags.join(", ")}
+                                </p>
+                            )}
+                            {receipt.quality_notes && (
+                                <p className="text-xs font-bold mt-2 uppercase">
+                                    NOTA: {receipt.quality_notes}
+                                </p>
+                            )}
+                        </div>
+
+                        <div className="border-t-2 border-dashed border-foreground/20 pt-4">
                             <span className="text-[10px] font-black uppercase text-muted">PROVA VISUAL</span>
                             <div className="mt-2">
                                 {receiptMedia.length > 0 ? (
@@ -142,6 +186,22 @@ export default function ReciboDetalhes({ params }: { params: Promise<{ id: strin
                                 )}
                             </div>
                         </div>
+
+                        {tip && (
+                            <div className="border-t-2 border-dashed border-foreground/20 pt-4">
+                                <span className="text-[10px] font-black uppercase text-muted">DICA DO DIA</span>
+                                <div className="mt-2 border-2 border-primary bg-primary/10 p-4">
+                                    <p className="stencil-text text-xs">{tip.title}</p>
+                                    <p className="font-bold text-xs mt-2">{tip.body}</p>
+                                </div>
+                            </div>
+                        )}
+
+                        {isLearnEnabled && (
+                            <div className="border-t-2 border-dashed border-foreground/20 pt-4">
+                                <NeighborhoodErrorsWidget neighborhoodId={receipt.request?.neighborhood_id} compact />
+                            </div>
+                        )}
                     </div>
 
                     <div className="bg-muted/10 p-4 text-center border-2 border-foreground">

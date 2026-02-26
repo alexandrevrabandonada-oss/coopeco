@@ -112,11 +112,32 @@ async function loginAs(page: Page, email: string, role: TestUser["role"]) {
 }
 
 async function createAssignedRequest(residentId: string, cooperadoId: string, status: "accepted" | "en_route" | "collected") {
+  const { data: activeWindow } = await serviceClient
+    .from("route_windows")
+    .select("id, weekday, start_time")
+    .eq("neighborhood_id", centroId)
+    .eq("active", true)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle<{ id: string; weekday: number; start_time: string }>();
+
+  const startTime = String(activeWindow?.start_time || "09:00");
+  const hour = Number(startTime.slice(0, 2));
+  const minute = Number(startTime.slice(3, 5));
+  const now = new Date();
+  const candidate = new Date(now);
+  const diff = ((activeWindow?.weekday ?? now.getDay()) - candidate.getDay() + 7) % 7;
+  candidate.setDate(candidate.getDate() + diff);
+  candidate.setHours(hour, minute, 0, 0);
+  if (diff === 0 && candidate.getTime() <= now.getTime()) candidate.setDate(candidate.getDate() + 7);
+
   const { data: request, error: requestError } = await serviceClient
     .from("pickup_requests")
     .insert({
       created_by: residentId,
       neighborhood_id: centroId,
+      route_window_id: activeWindow?.id ?? null,
+      scheduled_for: activeWindow ? candidate.toISOString() : null,
       status,
       notes: "playwright-media-proof",
     })
@@ -254,7 +275,7 @@ test("cooperado cria receipt e sobe 2 imagens (mock upload)", async ({ page }) =
       buffer: Buffer.from("mock-image-proof-2"),
     },
   ]);
-  await page.locator("textarea").fill("Playwright upload proof");
+  await page.locator("textarea").first().fill("Playwright upload proof");
   await page.getByRole("button", { name: "FINALIZAR E GERAR RECIBO" }).click();
 
   await expect
@@ -290,6 +311,52 @@ test("cooperado cria receipt e sobe 2 imagens (mock upload)", async ({ page }) =
       { timeout: 45_000 },
     )
     .toBe(2);
+});
+
+test("cooperado finaliza recibo com qualidade e resident ve dica", async ({ page }) => {
+  const resident = users.resident!;
+  const cooperado = users.cooperado!;
+  const requestId = await createAssignedRequest(resident.id, cooperado.id, "en_route");
+
+  await loginAs(page, cooperado.email, "cooperado");
+  await page.goto(`/cooperado/pedido/${requestId}`);
+  await expect(page.getByText("GESTÃO DE COLETA")).toBeVisible({ timeout: 60_000 });
+
+  await page.locator('input[type="file"]').setInputFiles([
+    {
+      name: "proof-quality.jpg",
+      mimeType: "image/jpeg",
+      buffer: Buffer.from("mock-image-quality"),
+    },
+  ]);
+
+  await page.getByLabel("Qualidade").selectOption("contaminated");
+  await page.getByLabel("RESIDUO ORGANICO").check();
+  await page.locator("textarea").first().fill("Teste de qualidade A8");
+  await page.locator("textarea").nth(1).fill("Separar e enxaguar antes da coleta.");
+  await page.getByRole("button", { name: "FINALIZAR E GERAR RECIBO" }).click();
+
+  let receiptIdValue: string | null = null;
+  await expect
+    .poll(async () => {
+      const { data } = await serviceClient
+        .from("receipts")
+        .select("id")
+        .eq("request_id", requestId)
+        .maybeSingle<{ id: string }>();
+      receiptIdValue = data?.id || null;
+      return receiptIdValue;
+    }, { timeout: 45_000 })
+    .not.toBeNull();
+
+  if (!receiptIdValue) {
+    throw new Error("Recibo com qualidade nao foi criado.");
+  }
+
+  await loginAs(page, resident.email, "resident");
+  await page.goto(`/recibos/${receiptIdValue}`);
+  await expect(page.getByText("DICA DO DIA")).toBeVisible({ timeout: 60_000 });
+  await expect(page.getByText("CONTAMINADO")).toBeVisible();
 });
 
 test("resident abre recibo e ve 2 imagens via signed-url batch", async ({ page }) => {

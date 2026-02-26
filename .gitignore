@@ -26,6 +26,7 @@ reports/
 # misc
 .DS_Store
 *.pem
+tools/_tls/
 
 # debug
 npm-debug.log*

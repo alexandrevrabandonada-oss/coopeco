@@ -8,9 +8,11 @@ dotenv.config({ path: '.env.local' });
 const MIGRATIONS_DIR = path.join(process.cwd(), 'supabase', 'migrations');
 const DB_URL = process.env.SUPABASE_DB_URL;
 const TLS_MODE = process.env.ECO_DB_TLS_MODE || 'verify';
+const SSL_ROOT_CERT_PATH_ENV = process.env.ECO_DB_SSL_ROOT_CERT_PATH || '';
 const NODE_ENV = process.env.NODE_ENV || 'development';
 const IS_CI = process.env.CI === '1' || process.env.CI === 'true';
 const IS_PROD = NODE_ENV === 'production';
+const DEFAULT_SSL_ROOT_CERT_PATH = path.join(process.cwd(), 'tools', '_tls', 'eco-supabase-ca.pem');
 
 if (!DB_URL) {
   console.error('ERRO: SUPABASE_DB_URL nao foi encontrado no .env.local.');
@@ -43,16 +45,42 @@ function buildConnectionString(rawUrl) {
     return rawUrl;
   }
 
-  const sslmode = parsed.searchParams.get('sslmode');
-  if (TLS_MODE === 'verify') {
-    if (!sslmode || sslmode === 'disable' || sslmode === 'allow' || sslmode === 'prefer' || sslmode === 'require' || sslmode === 'no-verify') {
-      parsed.searchParams.set('sslmode', 'verify-full');
-    }
-  } else if (TLS_MODE === 'no-verify') {
-    parsed.searchParams.set('sslmode', 'no-verify');
-  }
+  // node-postgres may prioritize sslmode parsed from URL over ssl config passed in code.
+  // Remove sslmode so `ssl` object below is authoritative.
+  parsed.searchParams.delete('sslmode');
 
   return parsed.toString();
+}
+
+async function fileExists(filePath) {
+  try {
+    await fs.access(filePath);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function resolveTlsCaPem() {
+  const explicitPath = SSL_ROOT_CERT_PATH_ENV
+    ? path.resolve(process.cwd(), SSL_ROOT_CERT_PATH_ENV)
+    : null;
+
+  if (explicitPath) {
+    if (!(await fileExists(explicitPath))) {
+      console.error(`ERRO: ECO_DB_SSL_ROOT_CERT_PATH nao encontrado: ${explicitPath}`);
+      process.exit(1);
+    }
+    const pem = await fs.readFile(explicitPath, 'utf8');
+    return { pem, pathUsed: explicitPath };
+  }
+
+  if (await fileExists(DEFAULT_SSL_ROOT_CERT_PATH)) {
+    const pem = await fs.readFile(DEFAULT_SSL_ROOT_CERT_PATH, 'utf8');
+    return { pem, pathUsed: DEFAULT_SSL_ROOT_CERT_PATH };
+  }
+
+  return { pem: null, pathUsed: null };
 }
 
 async function ensureHistoryTable(client) {
@@ -80,11 +108,23 @@ async function readMigrationFiles() {
 
 async function applyMigrations() {
   const connectionString = buildConnectionString(DB_URL);
+  const { pem: tlsCaPem, pathUsed: tlsCaPath } = await resolveTlsCaPem();
+
+  if (TLS_MODE === 'verify') {
+    if (tlsCaPath) {
+      console.log(`[INFO] TLS verified com CA local: ${tlsCaPath}`);
+    } else {
+      console.log('[INFO] TLS verified sem CA custom (cadeia padrao do sistema).');
+    }
+  }
+
   const client = new pg.Client({
     connectionString,
     ssl: TLS_MODE === 'no-verify'
       ? { rejectUnauthorized: false }
-      : { rejectUnauthorized: true },
+      : tlsCaPem
+        ? { rejectUnauthorized: true, ca: tlsCaPem }
+        : { rejectUnauthorized: true },
   });
   let applied = 0;
   let skipped = 0;

@@ -10,7 +10,8 @@
 - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
 - `SUPABASE_SERVICE_ROLE_KEY` (somente local/CI; nunca expor em frontend)
 - `SUPABASE_DB_URL` (somente local/CI)
-- `ECO_DB_TLS_MODE` (`verify` por padrao; `no-verify` somente em dev local)
+- `ECO_DB_TLS_MODE` (`verify` por padrao; `no-verify` bloqueado)
+- `ECO_DB_SSL_ROOT_CERT_PATH` (opcional; PEM local para CA de TLS)
 - `ECO_ENV` (`dev|staging|prod`)
 - `ECO_STAGING_PASS` (somente para `ECO_ENV=staging`)
 - `ECO_SMOKE_BASE_URL` (opcional; roda smoke contra staging remoto)
@@ -21,13 +22,21 @@
 - `npm run test:pack`
 - `npm run verify:ops`
 - `npm run smoke:beta`
+- `npm run smoke:staging`
+- `npm run tls:provision`
 - `npm run cleanup:dryrun`
 
 ## Smoke em staging
 - Defina `ECO_SMOKE_BASE_URL=https://seu-staging.vercel.app` para usar endpoints HTTP do app remoto (`signed-url`, `export CSV`, paginas de validacao).
-- Se o gate de staging estiver ativo, defina `ECO_SMOKE_STAGING_PASS` para enviar `x-eco-staging-pass` automaticamente.
+- Se o gate de staging estiver ativo, defina `ECO_SMOKE_STAGING_PASS` para enviar `x-eco-gate`/`x-eco-staging-pass` automaticamente.
 - Sem `ECO_SMOKE_BASE_URL`, o smoke sobe app local em `127.0.0.1` para validar endpoints do app.
 - O smoke usa `SUPABASE_SERVICE_ROLE_KEY` apenas para bootstrap de usuarios de teste no Auth; o fluxo funcional roda com sessao normal e RLS real.
+
+## TLS verified dev (sem no-verify)
+- Rode uma vez: `npm run tls:provision`
+- O comando extrai a cadeia TLS do endpoint Postgres e salva em `tools/_tls/eco-supabase-ca.pem`.
+- Depois rode `npm run db:apply` normalmente com `ECO_DB_TLS_MODE=verify`.
+- Opcional: use `ECO_DB_SSL_ROOT_CERT_PATH` para apontar para outro PEM.
 
 ## Recuperacao / Troubleshooting
 - Views nao aparecem:

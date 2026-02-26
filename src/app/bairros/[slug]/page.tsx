@@ -8,6 +8,8 @@ import Link from "next/link"
 
 export default function NeighborhoodImpact({ params }: { params: Promise<{ slug: string }> }) {
     const { slug } = use(params)
+    const isPilotEnabled = (process.env.NEXT_PUBLIC_ECO_FEATURES_PILOT ?? process.env.ECO_FEATURES_PILOT ?? "false").toLowerCase() === "true"
+    const isGovEnabled = (process.env.NEXT_PUBLIC_ECO_FEATURES_GOV ?? process.env.ECO_FEATURES_GOV ?? "false").toLowerCase() === "true"
     const [rank, setRank] = useState<NeighborhoodRank | null>(null)
     const [history, setHistory] = useState<TransparencyMonth[]>([])
     const [isLoading, setIsLoading] = useState(true)
@@ -123,6 +125,16 @@ export default function NeighborhoodImpact({ params }: { params: Promise<{ slug:
             <div className="flex flex-col gap-4">
                 <Link href="/pedir-coleta" className="cta-button w-full justify-center py-6">QUERO CONTRIBUIR AQUI</Link>
                 <Link href="/mural" className="cta-button w-full justify-center py-6 bg-secondary text-white">VER MURAL DO BAIRRO</Link>
+                {isPilotEnabled && (
+                    <Link href={`/bairros/${slug}/transparencia`} className="cta-button w-full justify-center py-6" style={{ background: "var(--accent)", color: "white" }}>
+                        VER TRANSPARÊNCIA SEMANAL
+                    </Link>
+                )}
+                {isGovEnabled && (
+                    <Link href={`/bairros/${slug}/decisoes`} className="cta-button w-full justify-center py-6" style={{ background: "#0f766e", color: "white" }}>
+                        VER RECIBOS DE DECISÃO
+                    </Link>
+                )}
             </div>
 
             <style jsx>{`

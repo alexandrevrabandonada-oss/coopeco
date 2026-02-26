@@ -17,6 +17,18 @@ const TEST_PW = 'EcoTest123!';
 const makeReceiptCode = (prefix) =>
   `${prefix}${Date.now().toString(36).toUpperCase()}${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
 
+function nextWeekdayTimestamp(weekday, hour = 9, minute = 0) {
+  const now = new Date();
+  const candidate = new Date(now);
+  const diff = (weekday - candidate.getDay() + 7) % 7;
+  candidate.setDate(candidate.getDate() + diff);
+  candidate.setHours(hour, minute, 0, 0);
+  if (diff === 0 && candidate.getTime() <= now.getTime()) {
+    candidate.setDate(candidate.getDate() + 7);
+  }
+  return candidate.toISOString();
+}
+
 async function runRLSProof() {
   console.log('--- ECO RLS PROOF START ---');
   const results = { pass: 0, fail: 0 };
@@ -75,6 +87,34 @@ async function runRLSProof() {
       throw new Error(`Bairro centro nao encontrado: ${centerError?.message ?? 'sem detalhes'}`);
     }
 
+    const { data: routeWindow, error: routeWindowError } = await serviceClient
+      .from('route_windows')
+      .insert({
+        neighborhood_id: centro.id,
+        weekday: 2,
+        start_time: '09:00:00',
+        end_time: '12:00:00',
+        capacity: 20,
+        active: true,
+      })
+      .select('id, weekday, start_time')
+      .single();
+    test('Operator cria route_window base', !routeWindowError && !!routeWindow, routeWindowError?.message);
+
+    const { data: dropPoint, error: dropPointError } = await serviceClient
+      .from('eco_drop_points')
+      .insert({
+        neighborhood_id: centro.id,
+        name: 'Ponto ECO Centro',
+        address_public: 'Rua Central, n. aproximado 100',
+        hours: 'Seg-Sex 09h-18h',
+        accepted_materials: ['paper', 'plastic'],
+        active: true,
+      })
+      .select('id, name')
+      .single();
+    test('Operator cria Ponto ECO', !dropPointError && !!dropPoint, dropPointError?.message);
+
     let altResident = userData.users.find((user) => user.email === 'eco.resident.alt@local');
     if (!altResident) {
       const { data: createdAltResident, error: createdAltResidentError } = await serviceClient.auth.admin.createUser({
@@ -108,11 +148,24 @@ async function runRLSProof() {
 
     const altResidentClient = await login(altResident.email);
 
+    const { data: activeWindowForBase } = await serviceClient
+      .from('route_windows')
+      .select('id, weekday, start_time')
+      .eq('neighborhood_id', centro.id)
+      .eq('active', true)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
     const { data: request, error: requestError } = await serviceClient
       .from('pickup_requests')
       .insert({
         created_by: resident.id,
         neighborhood_id: centro.id,
+        route_window_id: activeWindowForBase?.id ?? null,
+        scheduled_for: activeWindowForBase
+          ? nextWeekdayTimestamp(activeWindowForBase.weekday, Number((activeWindowForBase.start_time || '09:00').slice(0, 2)), Number((activeWindowForBase.start_time || '09:00').slice(3, 5)))
+          : null,
         status: 'open',
         notes: 'RLS proof run',
       })
@@ -220,6 +273,441 @@ async function runRLSProof() {
     });
     test('Operador promove role via RPC', !rpcError, rpcError?.message);
 
+    if (routeWindow) {
+      const scheduledFor = nextWeekdayTimestamp(routeWindow.weekday, 9, 0);
+      const { data: residentWindowRequest, error: residentWindowRequestError } = await residentClient
+        .from('pickup_requests')
+        .insert({
+          created_by: resident.id,
+          neighborhood_id: centro.id,
+          route_window_id: routeWindow.id,
+          scheduled_for: scheduledFor,
+          notes: 'RLS route window proof',
+        })
+        .select('id, route_window_id, scheduled_for')
+        .single();
+      test(
+        'Resident cria request com route_window_id e scheduled_for',
+        !residentWindowRequestError &&
+          !!residentWindowRequest &&
+          residentWindowRequest.route_window_id === routeWindow.id &&
+          !!residentWindowRequest.scheduled_for,
+        residentWindowRequestError?.message,
+      );
+
+      if (residentWindowRequest) {
+        await residentClient.from('pickup_request_items').insert({
+          request_id: residentWindowRequest.id,
+          material: 'paper',
+          unit: 'bag_m',
+          qty: 2,
+        });
+
+        await residentClient.from('pickup_request_private').insert({
+          request_id: residentWindowRequest.id,
+          address_full: 'Rua Janela, 123',
+          contact_phone: '000000000',
+        });
+
+        const { data: coopWindowRows, error: coopWindowRowsError } = await cooperadoClient
+          .from('pickup_requests')
+          .select('id, route_window_id, scheduled_for')
+          .eq('id', residentWindowRequest.id);
+        test(
+          'Cooperado lista request na janela do bairro',
+          !coopWindowRowsError && (coopWindowRows || []).length === 1,
+          coopWindowRowsError?.message,
+        );
+      }
+    }
+
+    if (dropPoint && routeWindow) {
+      const { data: dropPointRequest, error: dropPointRequestError } = await residentClient
+        .from('pickup_requests')
+        .insert({
+          created_by: resident.id,
+          neighborhood_id: centro.id,
+          route_window_id: routeWindow.id,
+          scheduled_for: nextWeekdayTimestamp(routeWindow.weekday, 10, 0),
+          fulfillment_mode: 'drop_point',
+          drop_point_id: dropPoint.id,
+          notes: 'RLS drop point request',
+        })
+        .select('id, fulfillment_mode, drop_point_id')
+        .single();
+      test(
+        'Resident cria request drop_point sem private',
+        !dropPointRequestError &&
+          !!dropPointRequest &&
+          dropPointRequest.fulfillment_mode === 'drop_point' &&
+          dropPointRequest.drop_point_id === dropPoint.id,
+        dropPointRequestError?.message,
+      );
+
+      if (dropPointRequest) {
+        await residentClient.from('pickup_request_items').insert({
+          request_id: dropPointRequest.id,
+          material: 'plastic',
+          unit: 'bag_m',
+          qty: 1,
+        });
+
+        const { data: privateDropPointRows, error: privateDropPointRowsError } = await serviceClient
+          .from('pickup_request_private')
+          .select('request_id')
+          .eq('request_id', dropPointRequest.id);
+        test(
+          'Drop point request nao exige private row',
+          !privateDropPointRowsError && (privateDropPointRows || []).length === 0,
+          privateDropPointRowsError?.message,
+        );
+
+        const { error: dropAssignmentError } = await cooperadoClient
+          .from('pickup_assignments')
+          .insert({
+            request_id: dropPointRequest.id,
+            cooperado_id: cooperado.id,
+          });
+        test('Cooperado aceita request drop_point', !dropAssignmentError, dropAssignmentError?.message);
+
+        if (!dropAssignmentError) {
+          await cooperadoClient.from('pickup_requests').update({ status: 'collected' }).eq('id', dropPointRequest.id);
+          const { data: dropReceipt, error: dropReceiptError } = await cooperadoClient
+            .from('receipts')
+            .insert({
+              request_id: dropPointRequest.id,
+              cooperado_id: cooperado.id,
+              receipt_code: makeReceiptCode('DP'),
+              quality_status: 'attention',
+              contamination_flags: ['mixed'],
+              quality_notes: 'Separar melhor por tipo de material no Ponto ECO.',
+            })
+            .select('id')
+            .single();
+          test(
+            'Cooperado finaliza drop_point com recibo e qualidade',
+            !dropReceiptError && !!dropReceipt,
+            dropReceiptError?.message,
+          );
+
+          if (dropReceipt) {
+            await new Promise((resolve) => setTimeout(resolve, 600));
+            const { data: dropReceiptTip, error: dropReceiptTipError } = await cooperadoClient
+              .from('receipt_tip')
+              .select('receipt_id, tip:edu_tips(slug, flag)')
+              .eq('receipt_id', dropReceipt.id)
+              .maybeSingle();
+            const dropTip = dropReceiptTip?.tip;
+            const dropTipFlag = Array.isArray(dropTip) ? dropTip[0]?.flag : dropTip?.flag;
+            test(
+              'Drop point receipt com qualidade recebe tip',
+              !dropReceiptTipError && !!dropReceiptTip && dropTipFlag === 'mixed',
+              dropReceiptTipError?.message ?? `tip_flag=${dropTipFlag ?? 'null'}`,
+            );
+          }
+        }
+      }
+    }
+
+    const { data: recurringSub, error: recurringSubError } = await residentClient
+      .from('recurring_subscriptions')
+      .insert({
+        created_by: resident.id,
+        neighborhood_id: centro.id,
+        scope: 'resident',
+        cadence: 'weekly',
+        preferred_weekday: 2,
+        preferred_window_id: null,
+        address_ref: 'RLS-REC',
+        status: 'active',
+      })
+      .select('id')
+      .single();
+    test('Resident cria assinatura recorrente', !recurringSubError && !!recurringSub, recurringSubError?.message);
+
+    if (routeWindow) {
+      const scheduledRecurring = nextWeekdayTimestamp(routeWindow.weekday, 11, 0);
+
+      const { error: residentAddressError } = await serviceClient
+        .from('pickup_address_profiles')
+        .upsert(
+          {
+            user_id: resident.id,
+            address_full: 'Rua Recorrente, 88',
+            contact_phone: '000000000',
+          },
+          { onConflict: 'user_id' },
+        );
+      test(
+        'Setup resident com pickup_address_profile para recorrencia doorstep',
+        !residentAddressError,
+        residentAddressError?.message,
+      );
+
+      const { error: clearAltAddressError } = await serviceClient
+        .from('pickup_address_profiles')
+        .delete()
+        .eq('user_id', altResident.id);
+      test(
+        'Setup remove pickup_address_profile do resident alternativo',
+        !clearAltAddressError,
+        clearAltAddressError?.message,
+      );
+
+      const { data: validRecurringSub, error: validRecurringSubError } = await serviceClient
+        .from('recurring_subscriptions')
+        .insert({
+          created_by: resident.id,
+          neighborhood_id: centro.id,
+          scope: 'resident',
+          cadence: 'weekly',
+          preferred_weekday: routeWindow.weekday,
+          preferred_window_id: routeWindow.id,
+          fulfillment_mode: 'doorstep',
+          notes: `RLS-RPC-VALID-${Date.now()}`,
+          status: 'active',
+        })
+        .select('id')
+        .single();
+      test(
+        'Setup assinatura ativa valida para RPC de recorrencia',
+        !validRecurringSubError && !!validRecurringSub,
+        validRecurringSubError?.message,
+      );
+
+      const { data: invalidRecurringSub, error: invalidRecurringSubError } = await serviceClient
+        .from('recurring_subscriptions')
+        .insert({
+          created_by: altResident.id,
+          neighborhood_id: centro.id,
+          scope: 'resident',
+          cadence: 'weekly',
+          preferred_weekday: routeWindow.weekday,
+          preferred_window_id: routeWindow.id,
+          fulfillment_mode: 'doorstep',
+          notes: `RLS-RPC-INVALID-${Date.now()}`,
+          status: 'active',
+        })
+        .select('id')
+        .single();
+      test(
+        'Setup assinatura invalida (sem endereco) para RPC de recorrencia',
+        !invalidRecurringSubError && !!invalidRecurringSub,
+        invalidRecurringSubError?.message,
+      );
+
+      const { data: pausedRecurringSub, error: pausedRecurringSubError } = await serviceClient
+        .from('recurring_subscriptions')
+        .insert({
+          created_by: resident.id,
+          neighborhood_id: centro.id,
+          scope: 'resident',
+          cadence: 'weekly',
+          preferred_weekday: routeWindow.weekday,
+          preferred_window_id: routeWindow.id,
+          fulfillment_mode: 'doorstep',
+          notes: `RLS-RPC-PAUSED-${Date.now()}`,
+          status: 'paused',
+        })
+        .select('id')
+        .single();
+      test(
+        'Setup assinatura pausada para RPC de recorrencia',
+        !pausedRecurringSubError && !!pausedRecurringSub,
+        pausedRecurringSubError?.message,
+      );
+
+      const { data: recurringRpcFirst, error: recurringRpcFirstError } = await operatorClient.rpc(
+        'rpc_generate_recurring_requests',
+        {
+          window_id: routeWindow.id,
+          scheduled_for: scheduledRecurring,
+        },
+      );
+      const recurringFirstGenerated = Number(recurringRpcFirst?.generated ?? 0);
+      const recurringFirstSkippedInvalid = Number(recurringRpcFirst?.skipped_invalid ?? 0);
+      const recurringFirstSkippedPaused = Number(recurringRpcFirst?.skipped_paused ?? 0);
+      test(
+        'Operator gera pedidos recorrentes da janela',
+        !recurringRpcFirstError && recurringFirstGenerated >= 1,
+        recurringRpcFirstError?.message ?? `generated=${recurringFirstGenerated}`,
+      );
+      test(
+        'RPC marca skipped_invalid quando assinatura doorstep nao possui endereco',
+        !recurringRpcFirstError && recurringFirstSkippedInvalid >= 1,
+        recurringRpcFirstError?.message ?? `skipped_invalid=${recurringFirstSkippedInvalid}`,
+      );
+      if (invalidRecurringSub) {
+        const { data: invalidNotifRows, error: invalidNotifError } = await serviceClient
+          .from('user_notifications')
+          .select('id, kind, user_id, entity_type, entity_id')
+          .eq('kind', 'recurring_skipped_invalid')
+          .eq('user_id', altResident.id)
+          .eq('entity_type', 'subscription')
+          .eq('entity_id', invalidRecurringSub.id)
+          .order('created_at', { ascending: false })
+          .limit(1);
+        test(
+          'Resident recebe notificacao de skipped_invalid na recorrencia',
+          !invalidNotifError && (invalidNotifRows || []).length >= 1,
+          invalidNotifError?.message ?? `rows=${(invalidNotifRows || []).length}`,
+        );
+      }
+      test(
+        'RPC marca skipped_paused para assinaturas pausadas',
+        !recurringRpcFirstError && recurringFirstSkippedPaused >= 1,
+        recurringRpcFirstError?.message ?? `skipped_paused=${recurringFirstSkippedPaused}`,
+      );
+
+      if (validRecurringSub) {
+        const { data: generatedRecurringRequest, error: generatedRecurringRequestError } = await serviceClient
+          .from('pickup_requests')
+          .select('id, is_recurring, subscription_id')
+          .eq('subscription_id', validRecurringSub.id)
+          .eq('route_window_id', routeWindow.id)
+          .eq('scheduled_for', scheduledRecurring)
+          .maybeSingle();
+        test(
+          'RPC cria pickup_request recorrente vinculado a assinatura',
+          !generatedRecurringRequestError &&
+            !!generatedRecurringRequest &&
+            generatedRecurringRequest.is_recurring === true &&
+            generatedRecurringRequest.subscription_id === validRecurringSub.id,
+          generatedRecurringRequestError?.message,
+        );
+      }
+
+      const { data: recurringRpcSecond, error: recurringRpcSecondError } = await operatorClient.rpc(
+        'rpc_generate_recurring_requests',
+        {
+          window_id: routeWindow.id,
+          scheduled_for: scheduledRecurring,
+        },
+      );
+      const recurringSecondGenerated = Number(recurringRpcSecond?.generated ?? 0);
+      const recurringSecondSkippedExisting = Number(recurringRpcSecond?.skipped_existing ?? 0);
+      test(
+        'RPC e idempotente: segunda chamada nao duplica pedidos',
+        !recurringRpcSecondError && recurringSecondGenerated === 0 && recurringSecondSkippedExisting >= 1,
+        recurringRpcSecondError?.message ??
+          `generated=${recurringSecondGenerated} skipped_existing=${recurringSecondSkippedExisting}`,
+      );
+
+      if (validRecurringSub) {
+        const { data: validOccurrenceRows, error: validOccurrenceRowsError } = await serviceClient
+          .from('recurring_occurrences')
+          .select('id')
+          .eq('subscription_id', validRecurringSub.id)
+          .eq('scheduled_for', scheduledRecurring);
+        test(
+          'Unique(subscription_id, scheduled_for) impede duplicacao de ocorrencia',
+          !validOccurrenceRowsError && (validOccurrenceRows || []).length === 1,
+          validOccurrenceRowsError?.message ?? `occurrences=${(validOccurrenceRows || []).length}`,
+        );
+      }
+
+      const { data: capacityWindow, error: capacityWindowError } = await serviceClient
+        .from('route_windows')
+        .insert({
+          neighborhood_id: centro.id,
+          weekday: routeWindow.weekday,
+          start_time: '15:00:00',
+          end_time: '18:00:00',
+          capacity: 1,
+          active: true,
+        })
+        .select('id, weekday')
+        .single();
+      test(
+        'Setup janela com capacidade limitada para recorrencia',
+        !capacityWindowError && !!capacityWindow,
+        capacityWindowError?.message,
+      );
+
+      if (capacityWindow) {
+        const capacityScheduled = nextWeekdayTimestamp(capacityWindow.weekday, 15, 0);
+        await serviceClient.from('pickup_address_profiles').upsert(
+          {
+            user_id: altResident.id,
+            address_full: 'Rua Capacidade, 55',
+            contact_phone: '111111111',
+          },
+          { onConflict: 'user_id' },
+        );
+
+        await serviceClient.from('recurring_subscriptions').insert([
+          {
+            created_by: resident.id,
+            neighborhood_id: centro.id,
+            scope: 'resident',
+            cadence: 'weekly',
+            preferred_weekday: capacityWindow.weekday,
+            preferred_window_id: capacityWindow.id,
+            fulfillment_mode: 'doorstep',
+            notes: `RLS-CAP-${Date.now()}-A`,
+            status: 'active',
+          },
+          {
+            created_by: altResident.id,
+            neighborhood_id: centro.id,
+            scope: 'resident',
+            cadence: 'weekly',
+            preferred_weekday: capacityWindow.weekday,
+            preferred_window_id: capacityWindow.id,
+            fulfillment_mode: 'doorstep',
+            notes: `RLS-CAP-${Date.now()}-B`,
+            status: 'active',
+          },
+        ]);
+
+        const { data: capacityRpc, error: capacityRpcError } = await operatorClient.rpc(
+          'rpc_generate_recurring_requests',
+          {
+            window_id: capacityWindow.id,
+            scheduled_for: capacityScheduled,
+          },
+        );
+        const capacityGenerated = Number(capacityRpc?.generated ?? 0);
+        const capacitySkipped = Number(capacityRpc?.skipped_capacity ?? 0);
+        test(
+          'RPC respeita capacity da janela e interrompe geracao',
+          !capacityRpcError && capacityGenerated === 1 && capacitySkipped === 1,
+          capacityRpcError?.message ?? `generated=${capacityGenerated} skipped_capacity=${capacitySkipped}`,
+        );
+        const { data: capacityNotifRows, error: capacityNotifError } = await serviceClient
+          .from('user_notifications')
+          .select('id, kind')
+          .eq('kind', 'recurring_skipped_capacity')
+          .eq('entity_type', 'window')
+          .eq('entity_id', capacityWindow.id)
+          .limit(5);
+        test(
+          'Skipped_capacity gera notificacao in-app para recorrencia',
+          !capacityNotifError && (capacityNotifRows || []).length >= 1,
+          capacityNotifError?.message ?? `rows=${(capacityNotifRows || []).length}`,
+        );
+      }
+    }
+
+    if (routeWindow) {
+      const { error: operatorWindowUpdateError } = await operatorClient
+        .from('route_windows')
+        .update({ capacity: 25 })
+        .eq('id', routeWindow.id);
+      test('Operator edita route_windows', !operatorWindowUpdateError, operatorWindowUpdateError?.message);
+    }
+
+    const { data: operatorSubs, error: operatorSubsError } = await operatorClient
+      .from('recurring_subscriptions')
+      .select('id, neighborhood_id')
+      .eq('neighborhood_id', centro.id)
+      .limit(5);
+    test(
+      'Operator ve assinaturas por bairro',
+      !operatorSubsError && (operatorSubs || []).length > 0,
+      operatorSubsError?.message,
+    );
+
     // --- PHASE A3: IMPACT & METRICAS TEST ---
     console.log('--- BATALHA A3: IMPACTO & METRICAS ---');
 
@@ -285,6 +773,22 @@ async function runRLSProof() {
       .eq('slug', 'centro')
       .maybeSingle();
     test('Public view v_rank_neighborhood_30d acessivel anonimamente', !viewError && !!viewData, viewError?.message);
+    test(
+      'Public view expoe quality_ok_rate_30d',
+      !viewError && !!viewData && Object.prototype.hasOwnProperty.call(viewData, 'quality_ok_rate_30d'),
+      viewError?.message ?? 'quality_ok_rate_30d ausente na view',
+    );
+
+    const { data: publicDropPoints, error: publicDropPointsError } = await anonClient
+      .from('eco_drop_points')
+      .select('id, name, address_public')
+      .eq('active', true)
+      .limit(5);
+    test(
+      'Publico consegue ver Pontos ECO no mapa',
+      !publicDropPointsError && (publicDropPoints || []).length > 0,
+      publicDropPointsError?.message,
+    );
 
     // 4. PRIVACY HARDENING: Anti-leakage probes
     console.log('--- PROVAS DE VAZAMENTO (HARDENING) ---');
@@ -313,6 +817,17 @@ async function runRLSProof() {
       .limit(1);
     test('Resident nao ve requests de outros bairros (isolar)', !otherError && (!otherReqs || otherReqs.length === 0), 'Vazamento entre bairros detectado');
 
+    const { data: otherUserNotifications, error: otherUserNotificationsError } = await residentClient
+      .from('user_notifications')
+      .select('id')
+      .eq('user_id', cooperado.id)
+      .limit(1);
+    test(
+      'Resident nao consegue ler notificacoes de outro usuario',
+      !otherUserNotificationsError && (!otherUserNotifications || otherUserNotifications.length === 0),
+      otherUserNotificationsError?.message ?? `rows=${(otherUserNotifications || []).length}`,
+    );
+
     // 5. BATALHA A4.1: PAYOUTS + ADJUSTMENTS + RECONCILIATION
     console.log('--- BATALHA A4.1: PAYOUTS & RECONCILIACAO ---');
 
@@ -324,6 +839,9 @@ async function runRLSProof() {
         request_id: request.id,
         cooperado_id: cooperado.id,
         receipt_code: makeReceiptCode('RLS'),
+        quality_status: 'contaminated',
+        contamination_flags: ['food'],
+        quality_notes: 'Material veio com residuos organicos.',
         items: [
           { material: 'plastic', unit: 'bag_m', quantity: 10 },
           { material: 'paper', unit: 'bag_p', quantity: 5 },
@@ -332,6 +850,38 @@ async function runRLSProof() {
       .select()
       .single();
     test('Cooperado (Servico) cria recibo com itens', !receiptError && !!receipt, receiptError?.message);
+    if (receipt) {
+      const { data: receiptNotificationRows, error: receiptNotificationError } = await serviceClient
+        .from('user_notifications')
+        .select('id, kind, user_id, entity_type, entity_id')
+        .eq('kind', 'receipt_ready')
+        .eq('entity_type', 'receipt')
+        .eq('entity_id', receipt.id)
+        .eq('user_id', resident.id)
+        .order('created_at', { ascending: false })
+        .limit(1);
+      test(
+        'Criacao de recibo gera notificacao receipt_ready para resident',
+        !receiptNotificationError && (receiptNotificationRows || []).length >= 1,
+        receiptNotificationError?.message ?? `rows=${(receiptNotificationRows || []).length}`,
+      );
+    }
+
+    if (receipt) {
+      await new Promise((resolve) => setTimeout(resolve, 600));
+      const { data: receiptTip, error: receiptTipError } = await serviceClient
+        .from('receipt_tip')
+        .select('receipt_id, tip:edu_tips(slug, flag)')
+        .eq('receipt_id', receipt.id)
+        .maybeSingle();
+      const tipObj = receiptTip?.tip;
+      const tipFlag = Array.isArray(tipObj) ? tipObj[0]?.flag : tipObj?.flag;
+      test(
+        'Receipt contaminated recebe tip correspondente',
+        !receiptTipError && !!receiptTip && tipFlag === 'food',
+        receiptTipError?.message ?? `tip_flag=${tipFlag ?? 'null'}`,
+      );
+    }
 
     if (receipt) {
       const { error: markReceiptError } = await serviceClient.from('receipts_test_marks').upsert(

@@ -3,6 +3,7 @@ import { access } from 'node:fs/promises';
 import path from 'node:path';
 import dotenv from 'dotenv';
 import { createClient } from '@supabase/supabase-js';
+import { fetchWithBypass, getDeploymentProtectionHint, maskBypassSecret } from './_fetchWithBypass.mjs';
 
 dotenv.config({ path: '.env.local' });
 
@@ -10,6 +11,7 @@ const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const smokeBaseUrlEnv = process.env.ECO_SMOKE_BASE_URL;
+const isRemoteSmoke = Boolean(smokeBaseUrlEnv);
 const smokePort = Number(process.env.ECO_SMOKE_PORT || 4317);
 const shouldCleanup = (process.env.ECO_SMOKE_CLEANUP || '').toLowerCase() === 'true';
 const stagingPass = process.env.ECO_SMOKE_STAGING_PASS || process.env.ECO_STAGING_PASS || '';
@@ -21,8 +23,13 @@ const TEST_EMAILS = {
   operator: 'eco.operator.test@local',
 };
 
-if (!supabaseUrl || !anonKey || !serviceKey) {
-  console.error('ERRO: NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY ou SUPABASE_SERVICE_ROLE_KEY faltando.');
+if (!supabaseUrl || !anonKey) {
+  console.error('ERRO: NEXT_PUBLIC_SUPABASE_URL ou NEXT_PUBLIC_SUPABASE_ANON_KEY faltando.');
+  process.exit(1);
+}
+
+if (!serviceKey) {
+  console.error('ERRO: SUPABASE_SERVICE_ROLE_KEY faltando (necessario para bootstrap de usuarios de teste).');
   process.exit(1);
 }
 
@@ -101,7 +108,7 @@ async function waitForHttpReady(baseUrl, timeoutMs = 90_000) {
   const startedAt = Date.now();
   while (Date.now() - startedAt < timeoutMs) {
     try {
-      const response = await fetch(`${baseUrl}/`, { method: 'GET' });
+      const response = await fetchWithBypass(`${baseUrl}/`, { method: 'GET' });
       if (response.status >= 200 && response.status < 500) {
         return;
       }
@@ -138,9 +145,22 @@ function makeReceiptCode(prefix) {
   return `${prefix}${Date.now().toString(36).toUpperCase()}${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
 }
 
+function nextWeekdayTimestamp(weekday, hour = 9, minute = 0) {
+  const now = new Date();
+  const candidate = new Date(now);
+  const diff = (weekday - candidate.getDay() + 7) % 7;
+  candidate.setDate(candidate.getDate() + diff);
+  candidate.setHours(hour, minute, 0, 0);
+  if (diff === 0 && candidate.getTime() <= now.getTime()) {
+    candidate.setDate(candidate.getDate() + 7);
+  }
+  return candidate.toISOString();
+}
+
 function makeHeaders(extra = {}) {
   const headers = { ...extra };
   if (stagingPass) {
+    headers['x-eco-gate'] = stagingPass;
     headers['x-eco-staging-pass'] = stagingPass;
   }
   return headers;
@@ -183,7 +203,7 @@ async function run() {
       return value;
     } catch (error) {
       failCount += 1;
-      const message = error?.message || String(error);
+      const message = maskBypassSecret(error?.message || String(error));
       console.log(`[FAIL] ${label}`);
       console.log(`       -> ${message}`);
       console.log(`       -> Causa provavel: ${guessCause(error)}`);
@@ -192,9 +212,13 @@ async function run() {
   };
 
   try {
-    await step('Garantir DB aplicado (db:apply)', async () => {
-      await runCommand(npmCmd, ['run', 'db:apply'], 'npm run db:apply');
-    });
+    if (!isRemoteSmoke) {
+      await step('Garantir DB aplicado (db:apply)', async () => {
+        await runCommand(npmCmd, ['run', 'db:apply'], 'npm run db:apply');
+      });
+    } else {
+      console.log('[INFO] ECO_SMOKE_BASE_URL detectado: skip de db:apply local no smoke remoto.');
+    }
 
     await step('Garantir usuarios de teste (eco-create-test-users)', async () => {
       await runCommand('node', ['tools/eco-create-test-users.mjs'], 'node tools/eco-create-test-users.mjs');
@@ -248,9 +272,24 @@ async function run() {
       neighborhoodId = centro.id;
       neighborhoodSlug = centro.slug || 'centro';
 
+      const { data: activeWindow } = await auth.resident.client
+        .from('route_windows')
+        .select('id, weekday, start_time')
+        .eq('neighborhood_id', neighborhoodId)
+        .eq('active', true)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      const startTime = String(activeWindow?.start_time || '09:00');
+      const hour = Number(startTime.slice(0, 2));
+      const minute = Number(startTime.slice(3, 5));
+
       const requestPayload = {
         created_by: auth.resident.user.id,
         neighborhood_id: neighborhoodId,
+        route_window_id: activeWindow?.id ?? null,
+        scheduled_for: activeWindow ? nextWeekdayTimestamp(activeWindow.weekday, hour, minute) : null,
         status: 'open',
         notes: 'DRYRUN BETA SMOKE',
       };
@@ -394,14 +433,19 @@ async function run() {
       }
 
       const auth = await login(TEST_EMAILS.resident);
-      const receiptPageResponse = await fetch(`${baseUrl}/recibos/${receiptId}`, {
+      const receiptPageResponse = await fetchWithBypass(`${baseUrl}/recibos/${receiptId}`, {
         headers: makeHeaders(),
       });
       if (!receiptPageResponse.ok) {
+        const body = await receiptPageResponse.text().catch(() => '');
+        const protectionHint = getDeploymentProtectionHint(receiptPageResponse.status, body);
+        if (protectionHint) {
+          throw new Error(protectionHint);
+        }
         throw new Error(`Pagina /recibos/${receiptId} retornou ${receiptPageResponse.status}.`);
       }
 
-      const batchResponse = await fetch(
+      const batchResponse = await fetchWithBypass(
         `${baseUrl}/api/media/signed-url?entity_type=receipt&entity_id=${receiptId}`,
         {
           headers: makeHeaders({
@@ -410,6 +454,11 @@ async function run() {
         },
       );
       if (batchResponse.status !== 200) {
+        const body = await batchResponse.text().catch(() => '');
+        const protectionHint = getDeploymentProtectionHint(batchResponse.status, body);
+        if (protectionHint) {
+          throw new Error(protectionHint);
+        }
         throw new Error(`Batch signed-url retornou ${batchResponse.status}.`);
       }
 
@@ -480,12 +529,17 @@ async function run() {
       if (!baseUrl) {
         throw new Error('Base URL do app nao disponivel para validar export CSV.');
       }
-      const csvResponse = await fetch(`${baseUrl}/api/admin/payouts/export?period_id=${periodId}`, {
+      const csvResponse = await fetchWithBypass(`${baseUrl}/api/admin/payouts/export?period_id=${periodId}`, {
         headers: makeHeaders({
           Authorization: `Bearer ${operator.token}`,
         }),
       });
       if (csvResponse.status !== 200) {
+        const body = await csvResponse.text().catch(() => '');
+        const protectionHint = getDeploymentProtectionHint(csvResponse.status, body);
+        if (protectionHint) {
+          throw new Error(protectionHint);
+        }
         throw new Error(`Export CSV retornou ${csvResponse.status}.`);
       }
       const csvText = await csvResponse.text();
@@ -507,7 +561,7 @@ async function run() {
   } catch (error) {
     console.error('\nSMOKE BETA FALHOU.');
     console.error(`Etapa: ${stepNumber}`);
-    console.error(`Erro: ${error?.message || String(error)}`);
+    console.error(`Erro: ${maskBypassSecret(error?.message || String(error))}`);
     console.error(`Causa provavel: ${guessCause(error)}`);
     console.log(`RESUMO SMOKE BETA: ${passCount} PASS / ${failCount} FAIL`);
     process.exit(1);

@@ -7,6 +7,21 @@ export const isSupabaseConfigured = Boolean(supabaseUrl && supabaseAnonKey)
 
 export const createClient = () => {
   if (!isSupabaseConfigured) {
+    // Allow Next.js prerender/build to import client pages without crashing.
+    // Client-side usage should still fail fast with a clear configuration error.
+    if (typeof window === 'undefined') {
+      return new Proxy(
+        {},
+        {
+          get() {
+            throw new Error(
+              'Supabase client was accessed on the server without NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY.'
+            )
+          },
+        }
+      ) as ReturnType<typeof createSupabaseClient>
+    }
+
     throw new Error(
       'Missing NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_ANON_KEY.'
     )

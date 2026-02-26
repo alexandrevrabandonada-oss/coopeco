@@ -25,6 +25,7 @@ I have successfully initialized the ECO PWA project with a premium mobile-first 
 ### Build & Lint
 - **Lint**: `npm run lint` passed successfully.
 - **Build**: `npm run build` completed with all static pages generated.
+- **Health Route (App Router)**: `src/app/api/health/route.ts` verified with `npm run dev` + `curl http://localhost:3000/api/health` returning HTTP 200 and JSON payload (`ok`, `ts`).
 
 ```bash
 ✓ Generating static pages using 11 workers (14/14)
