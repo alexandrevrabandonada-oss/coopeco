@@ -1,34 +1,68 @@
 "use client"
 
-import { useEffect, useState } from "react"
-import { getSignedUrl } from "@/lib/storage-helpers"
+import { useEffect, useRef, useState } from "react"
+import { getSignedUrlByMediaId } from "@/lib/storage-helpers"
 import { Loader2, ImageOff } from "lucide-react"
 
 interface MediaPreviewProps {
-    path: string
+    mediaId: string
     alt?: string
     className?: string
+    signedUrl?: string | null
 }
 
-export function MediaPreview({ path, alt, className }: MediaPreviewProps) {
-    const [url, setUrl] = useState<string | null>(null)
+export function MediaPreview({ mediaId, alt, className, signedUrl }: MediaPreviewProps) {
+    const [url, setUrl] = useState<string | null>(signedUrl ?? null)
     const [error, setError] = useState(false)
     const [isLoading, setIsLoading] = useState(true)
+    const hasRenewedRef = useRef(false)
 
     useEffect(() => {
+        hasRenewedRef.current = false
+
         async function loadUrl() {
-            setIsLoading(true)
-            const signedUrl = await getSignedUrl(path)
             if (signedUrl) {
                 setUrl(signedUrl)
+                setError(false)
+                setIsLoading(false)
+                return
+            }
+
+            setIsLoading(true)
+            setError(false)
+            const freshSignedUrl = await getSignedUrlByMediaId(mediaId, 180)
+            if (freshSignedUrl) {
+                setUrl(freshSignedUrl)
             } else {
+                setUrl(null)
                 setError(true)
             }
             setIsLoading(false)
         }
 
-        if (path) loadUrl()
-    }, [path])
+        if (mediaId) loadUrl()
+    }, [mediaId, signedUrl])
+
+    const renewSignedUrl = async () => {
+        if (hasRenewedRef.current) {
+            setError(true)
+            return
+        }
+
+        hasRenewedRef.current = true
+        setIsLoading(true)
+        const renewed = await getSignedUrlByMediaId(mediaId, 180, { forceRefresh: true })
+        if (!renewed) {
+            setUrl(null)
+            setError(true)
+            setIsLoading(false)
+            return
+        }
+
+        setUrl(renewed)
+        setError(false)
+        setIsLoading(false)
+    }
 
     if (isLoading) {
         return (
@@ -49,7 +83,17 @@ export function MediaPreview({ path, alt, className }: MediaPreviewProps) {
 
     return (
         <div className={`card p-0 overflow-hidden ${className}`}>
-            <img src={url} alt={alt || "ECO Media"} className="w-full h-auto block" />
+            {/* Signed URL from storage may expire; keep native img for direct retry/onError control. */}
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+                src={url}
+                alt={alt || "ECO Media"}
+                className="w-full h-auto block"
+                data-testid="media-preview-image"
+                onError={() => {
+                    void renewSignedUrl()
+                }}
+            />
         </div>
     )
 }

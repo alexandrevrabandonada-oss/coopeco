@@ -1,4 +1,4 @@
-import { createBrowserClient } from '@supabase/ssr'
+import { createClient as createSupabaseClient } from '@supabase/supabase-js'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
@@ -12,5 +12,19 @@ export const createClient = () => {
     )
   }
 
-  return createBrowserClient(supabaseUrl!, supabaseAnonKey!)
+  const e2eToken =
+    typeof window !== "undefined" &&
+    ["localhost", "127.0.0.1"].includes(window.location.hostname)
+      ? window.localStorage.getItem("eco_e2e_access_token")
+      : null
+
+  return createSupabaseClient(supabaseUrl!, supabaseAnonKey!, {
+    global: e2eToken
+      ? {
+          headers: {
+            Authorization: `Bearer ${e2eToken}`,
+          },
+        }
+      : undefined,
+  })
 }

@@ -1,0 +1,23 @@
+
+> eco@0.1.0 build
+> next build
+
+Ôû▓ Next.js 16.1.6 (Turbopack)
+- Environments: .env.local
+
+  Creating an optimized production build ...
+Ô£ô Compiled successfully in 2.4s
+  Running TypeScript ...
+Failed to compile.
+
+./src/components/profile-onboarding.tsx:82:46
+Type error: 'n' is of type 'unknown'.
+
+  80 |                             <option value="">SELECIONE SEU TERRIT├ôRIO</option>
+  81 |                             {neighborhoods.map((n) => (
+> 82 |                                 <option key={n.id} value={n.id}>{n.name}</option>
+     |                                              ^
+  83 |                             ))}
+  84 |                         </select>
+  85 |                     </div>
+Next.js build worker exited with code: 1 and signal: null

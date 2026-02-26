@@ -1,0 +1,46 @@
+name: verify-beta
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+jobs:
+  verify-beta:
+    runs-on: ubuntu-latest
+    env:
+      NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+      ECO_SMOKE_BASE_URL: ${{ secrets.ECO_SMOKE_BASE_URL }}
+      ECO_SMOKE_STAGING_PASS: ${{ secrets.ECO_SMOKE_STAGING_PASS }}
+      ECO_DB_TLS_MODE: verify
+      ECO_ENV: dev
+      CI: "1"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright browser
+        run: npx playwright install --with-deps chromium
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Build
+        run: npm run build
+
+      - name: Verify beta
+        run: npm run verify:beta

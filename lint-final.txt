@@ -1,0 +1,137 @@
+
+> eco@0.1.0 lint
+> eslint
+
+
+C:\Projetos\COOP ECO\src\app\cooperado\page.tsx
+   11:54  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+   12:56  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+   16:26  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  162:71  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+C:\Projetos\COOP ECO\src\app\cooperado\pedido\[id]\page.tsx
+   14:44  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  150:55  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+C:\Projetos\COOP ECO\src\app\mural\page.tsx
+  12:40  error  Unexpected any. Specify a different type                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       @typescript-eslint/no-explicit-any
+  16:26  error  Unexpected any. Specify a different type                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       @typescript-eslint/no-explicit-any
+  18:35  error  Compilation Skipped: Existing memoization could not be preserved
+
+React Compiler has skipped optimizing this component because the existing manual memoization could not be preserved. The inferred dependencies did not match the manually specified dependencies, which could cause the value to change more or less frequently than expected. The inferred dependency was `p`, but the source dependencies were [p?.neighborhood_id, supabase]. Inferred less specific property than source.
+
+C:\Projetos\COOP ECO\src\app\mural\page.tsx:18:35
+  16 |     const p = profile as any
+  17 |
+> 18 |     const loadMural = useCallback(async () => {
+     |                                   ^^^^^^^^^^^^^
+> 19 |         setIsLoading(true)
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 20 |         const query = supabase
+     ÔÇª
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 42 |         setIsLoading(false)
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 43 |     }, [p?.neighborhood_id, supabase])
+     | ^^^^^^ Could not preserve existing manual memoization
+  44 |
+  45 |     useEffect(() => {
+  46 |         loadMural()  react-hooks/preserve-manual-memoization
+  46:9   error  Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+C:\Projetos\COOP ECO\src\app\mural\page.tsx:46:9
+  44 |
+  45 |     useEffect(() => {
+> 46 |         loadMural()
+     |         ^^^^^^^^^ Avoid calling setState() directly within an effect
+  47 |     }, [loadMural])
+  48 |
+  49 |     if (isLoading) return <div className="flex justify-center py-20"><Loader2 className="animate-spin text-primary" size={48} /></div>                 react-hooks/set-state-in-effect
+
+C:\Projetos\COOP ECO\src\app\pedidos\page.tsx
+  11:46  error  Unexpected any. Specify a different type                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              @typescript-eslint/no-explicit-any
+  33:9   error  Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+C:\Projetos\COOP ECO\src\app\pedidos\page.tsx:33:9
+  31 |
+  32 |     useEffect(() => {
+> 33 |         loadPedidos()
+     |         ^^^^^^^^^^^ Avoid calling setState() directly within an effect
+  34 |     }, [loadPedidos])
+  35 |
+  36 |     if (isLoading) {  react-hooks/set-state-in-effect
+
+C:\Projetos\COOP ECO\src\app\pedir-coleta\page.tsx
+  35:26  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  39:66  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+C:\Projetos\COOP ECO\src\app\perfil\page.tsx
+  29:26  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+C:\Projetos\COOP ECO\src\app\recibos\[id]\page.tsx
+  12:44  error  Unexpected any. Specify a different type                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     @typescript-eslint/no-explicit-any
+  38:9   error  Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+C:\Projetos\COOP ECO\src\app\recibos\[id]\page.tsx:38:9
+  36 |
+  37 |     useEffect(() => {
+> 38 |         loadReceipt()
+     |         ^^^^^^^^^^^ Avoid calling setState() directly within an effect
+  39 |     }, [loadReceipt])
+  40 |
+  41 |     if (isLoading) return <div className="flex justify-center py-20"><Loader2 className="animate-spin text-primary" size={48} /></div>  react-hooks/set-state-in-effect
+  87:69  error  Unexpected any. Specify a different type                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     @typescript-eslint/no-explicit-any
+
+C:\Projetos\COOP ECO\src\components\layout.tsx
+  5:42  warning  'Recycle' is defined but never used  @typescript-eslint/no-unused-vars
+
+C:\Projetos\COOP ECO\src\components\media-preview.tsx
+  52:13  warning  Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` or a custom image loader to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element  @next/next/no-img-element
+
+C:\Projetos\COOP ECO\src\components\media-upload.tsx
+   4:18  warning  'Upload' is defined but never used                                                                                                                                                                                                                                                       @typescript-eslint/no-unused-vars
+  61:21  warning  Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` or a custom image loader to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element  @next/next/no-img-element
+
+C:\Projetos\COOP ECO\src\components\profile-onboarding.tsx
+  12:56  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+C:\Projetos\COOP ECO\src\contexts\auth-context.tsx
+  10:14  error  Unexpected any. Specify a different type                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          @typescript-eslint/no-explicit-any
+  26:44  error  Unexpected any. Specify a different type                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          @typescript-eslint/no-explicit-any
+  31:13  error  Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+C:\Projetos\COOP ECO\src\contexts\auth-context.tsx:31:13
+  29 |     useEffect(() => {
+  30 |         if (!isSupabaseConfigured) {
+> 31 |             setIsLoading(false)
+     |             ^^^^^^^^^^^^ Avoid calling setState() directly within an effect
+  32 |             return
+  33 |         }
+  34 |  react-hooks/set-state-in-effect
+
+Ô£û 26 problems (22 errors, 4 warnings)
+

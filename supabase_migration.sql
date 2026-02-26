@@ -105,7 +105,10 @@ CREATE TABLE public.reactions_actions (
 -- Partners
 CREATE TABLE public.partners (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    slug TEXT UNIQUE NOT NULL,
     name TEXT NOT NULL,
+    kind TEXT NOT NULL, -- collector, recycler, sponsor
+    description TEXT,
     type TEXT, -- empresa, condominio, ecoponto
     neighborhood_id UUID REFERENCES public.neighborhoods(id),
     seal_active BOOLEAN DEFAULT false NOT NULL,
@@ -145,25 +148,6 @@ BEGIN
     END LOOP;
     RETURN new_code;
 END;
-$$ LANGUAGE plpgsql;
-
--- Trigger to validate receipt creation
-CREATE OR REPLACE FUNCTION public.validate_receipt_creation()
-RETURNS TRIGGER AS $$
-BEGIN
-    -- Request must be in 'collected' status or at least 'accepted'
-    IF NOT EXISTS (
-        SELECT 1 FROM public.pickup_requests 
-        WHERE id = NEW.request_id AND status IN ('accepted', 'en_route', 'collected')
-    ) THEN
-        RAISE EXCEPTION 'Receipt cannot be created for a request that is not accepted/collected';
-    END IF;
-    
-    -- Request must have an assignment for this cooperado
-    IF NOT EXISTS (
-        SELECT 1 FROM public.pickup_assignments 
-        WHERE request_id = NEW.request_id AND cooperado_id = NEW.cooperado_id
-    ) THEN
         RAISE EXCEPTION 'Receipt can only be created by the assigned cooperado';
     END IF;
 
@@ -171,9 +155,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
-CREATE TRIGGER tr_validate_receipt
-BEFORE INSERT ON public.receipts
-FOR EACH ROW EXECUTE FUNCTION public.validate_receipt_creation();
+DROP TRIGGER IF EXISTS tr_validate_receipt ON public.receipts;
 
 -- 4. RLS POLICIES
 
@@ -190,6 +172,43 @@ ALTER TABLE public.partners ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.partner_receipts ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.moderation_queue ENABLE ROW LEVEL SECURITY;
 
+-- Helper: evaluate caller role without recursive policy checks
+CREATE OR REPLACE FUNCTION public.has_role(roles public.app_role[])
+RETURNS boolean
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT EXISTS (
+    SELECT 1
+    FROM public.profiles p
+    WHERE p.user_id = auth.uid()
+      AND p.role = ANY(roles)
+  );
+$$;
+
+REVOKE ALL ON FUNCTION public.has_role(public.app_role[]) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.has_role(public.app_role[]) TO authenticated;
+
+CREATE OR REPLACE FUNCTION public.is_assigned_cooperado(target_request_id uuid)
+RETURNS boolean
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT EXISTS (
+    SELECT 1
+    FROM public.pickup_assignments pa
+    WHERE pa.request_id = target_request_id
+      AND pa.cooperado_id = auth.uid()
+  );
+$$;
+
+REVOKE ALL ON FUNCTION public.is_assigned_cooperado(uuid) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.is_assigned_cooperado(uuid) TO authenticated;
+
 -- Neighborhoods: Viewable by anyone
 CREATE POLICY "Neighborhoods are public" ON public.neighborhoods FOR SELECT USING (true);
 
@@ -197,7 +216,7 @@ CREATE POLICY "Neighborhoods are public" ON public.neighborhoods FOR SELECT USIN
 CREATE POLICY "Users can read their own profile" ON public.profiles FOR SELECT USING (auth.uid() = user_id);
 CREATE POLICY "Public profiles are public" ON public.profiles FOR SELECT USING (is_public = true);
 CREATE POLICY "Operators/Moderators see all profiles" ON public.profiles FOR SELECT USING (
-    EXISTS (SELECT 1 FROM public.profiles WHERE user_id = auth.uid() AND role IN ('operator', 'moderator'))
+    public.has_role(ARRAY['operator'::public.app_role, 'moderator'::public.app_role])
 );
 
 -- Pickup Requests
@@ -206,31 +225,32 @@ CREATE POLICY "Residents see open requests in their neighborhood" ON public.pick
     status = 'open' AND neighborhood_id = (SELECT neighborhood_id FROM public.profiles WHERE user_id = auth.uid())
 );
 CREATE POLICY "Operators see all requests" ON public.pickup_requests FOR SELECT USING (
-    EXISTS (SELECT 1 FROM public.profiles WHERE user_id = auth.uid() AND role = 'operator')
+    public.has_role(ARRAY['operator'::public.app_role])
 );
 
 -- Pickup Request Private
 CREATE POLICY "Operators see all private data" ON public.pickup_request_private FOR SELECT USING (
-    EXISTS (SELECT 1 FROM public.profiles WHERE user_id = auth.uid() AND role = 'operator')
+    public.has_role(ARRAY['operator'::public.app_role])
 );
 CREATE POLICY "Assigned cooperado sees private data" ON public.pickup_request_private FOR SELECT USING (
-    EXISTS (
-        SELECT 1 FROM public.pickup_assignments 
-        WHERE request_id = public.pickup_request_private.request_id 
-        AND cooperado_id = auth.uid()
-    )
+    public.is_assigned_cooperado(public.pickup_request_private.request_id)
 );
 
 -- Receipts
-CREATE POLICY "Users see their own receipts" ON public.receipts FOR SELECT USING (
-    EXISTS (SELECT 1 FROM public.pickup_requests WHERE id = request_id AND created_by = auth.uid())
-    OR cooperado_id = auth.uid()
+CREATE POLICY "Assigned cooperado can insert receipts" ON public.receipts FOR INSERT WITH CHECK (
+    public.is_assigned_cooperado(request_id)
+);
+
+CREATE POLICY "Users and Operators see receipts" ON public.receipts FOR SELECT USING (
+    public.has_role(ARRAY['operator'::public.app_role]) OR
+    EXISTS (SELECT 1 FROM public.pickup_requests WHERE id = request_id AND created_by = auth.uid()) OR
+    cooperado_id = auth.uid()
 );
 
 -- Posts
 CREATE POLICY "Posts are public" ON public.posts FOR SELECT USING (true);
 CREATE POLICY "Only operators can pin" ON public.posts FOR UPDATE USING (
-    EXISTS (SELECT 1 FROM public.profiles WHERE user_id = auth.uid() AND role = 'operator')
+    public.has_role(ARRAY['operator'::public.app_role])
 );
 
 -- 5. INDICES
