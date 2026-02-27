@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
 import { BottomNav, Header } from "@/components/layout";
+import { VRBadge } from "@/components/vr-badge";
 import { ProtectedRouteGate } from "@/components/protected-route-gate";
 
 const inter = Inter({ subsets: ["latin"] });
@@ -18,22 +19,6 @@ export const metadata: Metadata = {
 };
 
 import { AuthProvider } from "@/contexts/auth-context";
-
-function VRBadge() {
-  // badge fixed in a corner with logo and text
-  // if the file is missing the <img> will be hidden so the text remains visible
-  return (
-    <div className="vr-badge">
-      {/* place your logo at public/vr-abandonada.png */}
-      <img
-        src="/vr-abandonada.png"
-        alt="VR Abandonada"
-        onError={(e) => { e.currentTarget.style.display = 'none'; }}
-      />
-      <span>faz parte do projeto VR Abandonada</span>
-    </div>
-  );
-}
 
 export default function RootLayout({
   children,
