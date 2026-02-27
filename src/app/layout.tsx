@@ -19,6 +19,17 @@ export const metadata: Metadata = {
 
 import { AuthProvider } from "@/contexts/auth-context";
 
+function VRBadge() {
+  // badge fixed in a corner with logo and text
+  return (
+    <div className="vr-badge">
+      {/* image should be added to public/vr-abandonada.png */}
+      <img src="/vr-abandonada.png" alt="VR Abandonada" />
+      <span>faz parte do projeto VR Abandonada</span>
+    </div>
+  );
+}
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -28,6 +39,7 @@ export default function RootLayout({
     <html lang="pt-BR">
       <body className={inter.className}>
         <AuthProvider>
+          <VRBadge />
           <div className="app-wrapper">
             <Header />
             <main className="main-content">

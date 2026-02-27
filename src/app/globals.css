@@ -198,6 +198,30 @@ button {
     width: fit-content;
     left: 50%;
     transform: translateX(-50%);
+}
+
+/* VR Abandonada badge */
+.vr-badge {
+  position: fixed;
+  bottom: 1rem;
+  right: 1rem;
+  background: rgba(255, 255, 255, 0.8);
+  padding: 0.5rem 0.75rem;
+  border-radius: 0.5rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  z-index: 1000;
+  font-family: inherit;
+}
+.vr-badge img {
+  height: 2rem;
+  width: auto;
+}
+.vr-badge span {
+  font-size: 0.75rem;
+  white-space: nowrap;
+}
     bottom: 2rem;
     border-radius: 4px;
     padding: 0 2rem;
