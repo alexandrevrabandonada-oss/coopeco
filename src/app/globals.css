@@ -222,12 +222,6 @@ button {
   font-size: 0.75rem;
   white-space: nowrap;
 }
-    bottom: 2rem;
-    border-radius: 4px;
-    padding: 0 2rem;
-    border: 2px solid var(--primary);
-  }
-}
 
 /* Stencil Text Effects */
 .stencil-text {
