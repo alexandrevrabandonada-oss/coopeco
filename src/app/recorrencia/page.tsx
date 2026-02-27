@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase";
 import { useAuth } from "@/contexts/auth-context";
 import { Loader2, Repeat2, ShieldOff } from "lucide-react";
@@ -19,6 +20,7 @@ const weekdays = [
 ];
 
 export default function RecorrenciaPage() {
+  const router = useRouter();
   const { user, profile, isLoading: authLoading } = useAuth();
   const p = profile as Profile | null;
   const supabase = useMemo(() => createClient(), []);
@@ -40,7 +42,21 @@ export default function RecorrenciaPage() {
   const [notes, setNotes] = useState("");
 
   const loadData = useCallback(async () => {
-    if (!user || !p?.neighborhood_id) return;
+    if (!user) return;
+
+    // Soft-redirection check
+    const { data: onboarding } = await supabase
+      .from("onboarding_state")
+      .select("step")
+      .eq("user_id", user.id)
+      .maybeSingle();
+
+    if (onboarding && !['first_action', 'done'].includes(onboarding.step)) {
+      router.push("/começar");
+      return;
+    }
+
+    if (!p?.neighborhood_id) return;
     setIsLoading(true);
     setErrorMessage(null);
     try {
@@ -57,8 +73,8 @@ export default function RecorrenciaPage() {
             .select("*")
             .eq("neighborhood_id", p.neighborhood_id)
             .eq("active", true)
-                .order("weekday", { ascending: true })
-                .order("start_time", { ascending: true }),
+            .order("weekday", { ascending: true })
+            .order("start_time", { ascending: true }),
           supabase
             .from("eco_drop_points")
             .select("*")

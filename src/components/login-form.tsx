@@ -3,16 +3,19 @@
 import { useState } from "react"
 import { createClient } from "@/lib/supabase"
 import { Mail, Loader2, ArrowRight } from "lucide-react"
+import { ErrorState } from "@/components/error-state"
 
 export function LoginForm() {
     const [email, setEmail] = useState("")
     const [isSubmitting, setIsSubmitting] = useState(false)
     const [isSent, setIsSent] = useState(false)
+    const [errorMessage, setErrorMessage] = useState<string | null>(null)
     const supabase = createClient()
 
     const handleLogin = async (e: React.FormEvent) => {
         e.preventDefault()
         setIsSubmitting(true)
+        setErrorMessage(null)
 
         try {
             const { error } = await supabase.auth.signInWithOtp({
@@ -24,8 +27,8 @@ export function LoginForm() {
             if (error) throw error
             setIsSent(true)
         } catch (err) {
-            console.error(err)
-            alert("Erro ao enviar link. Verifique o email.")
+            const message = (err as Error).message || "Não foi possível enviar o link de acesso."
+            setErrorMessage(message)
         } finally {
             setIsSubmitting(false)
         }
@@ -36,7 +39,8 @@ export function LoginForm() {
             <div className="card text-center py-12 animate-slide-up">
                 <Mail size={48} className="mx-auto mb-4 text-primary" />
                 <h3 className="stencil-text text-xl mb-2">LINK ENVIADO!</h3>
-                <p style={{ fontWeight: 700 }}>VERIFIQUE SUA CAIXA DE ENTRADA E CLIQUE NO LINK PARA ENTRAR.</p>
+                <p style={{ fontWeight: 700 }}>ENVIAMOS UM LINK MÁGICO. VERIFIQUE SEU EMAIL PARA ENTRAR.</p>
+                <p className="font-bold text-xs uppercase mt-2">Se não encontrar, cheque spam ou promoções.</p>
                 <button
                     onClick={() => setIsSent(false)}
                     className="mt-6 text-sm font-black underline uppercase"
@@ -83,6 +87,16 @@ export function LoginForm() {
                     )}
                 </button>
             </form>
+            {errorMessage && (
+                <div className="mt-6">
+                    <ErrorState
+                        title="Não foi possível enviar o link"
+                        body={errorMessage}
+                        onRetry={() => setErrorMessage(null)}
+                        code="ECO_LOGIN_SEND_FAIL"
+                    />
+                </div>
+            )}
 
             <style jsx>{`
         .flex { display: flex; }

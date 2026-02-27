@@ -231,3 +231,110 @@ export interface UserNotification {
     is_read: boolean;
     created_at: string;
 }
+
+export interface PilotProgram {
+    id: string;
+    city: string;
+    status: 'planning' | 'active' | 'paused' | 'completed';
+    starts_on?: string;
+    notes_public?: string;
+    notes_ops?: string;
+    created_at: string;
+    updated_at: string;
+}
+
+export interface PilotProgramNeighborhood {
+    id: string;
+    program_id: string;
+    neighborhood_id: string;
+    priority: number;
+    status: 'active' | 'inactive';
+    neighborhood?: Neighborhood;
+}
+
+export interface PilotChecklist {
+    id: string;
+    program_id: string;
+    kind: 'opening' | 'before_window' | 'during_window' | 'closing_day' | 'closing_week';
+    title: string;
+    created_at: string;
+}
+
+export interface PilotChecklistItem {
+    id: string;
+    checklist_id: string;
+    neighborhood_id: string;
+    task_key: string;
+    title: string;
+    status: 'todo' | 'done' | 'skipped';
+    meta?: any;
+    completed_at?: string;
+    completed_by?: string;
+}
+
+export interface WeeklyBulletin {
+    id: string;
+    neighborhood_id: string;
+    year: number;
+    week_number: number;
+    status: 'draft' | 'published' | 'archived';
+    published_at?: string;
+    created_at: string;
+    neighborhood?: Neighborhood;
+}
+
+export interface WeeklyBulletinBlock {
+    id: string;
+    bulletin_id: string;
+    kind: 'stats' | 'contamination' | 'decisions' | 'highlights';
+    content: any;
+    rank_order: number;
+}
+
+export interface NeighborhoodWeeklySnapshot {
+    neighborhood_id: string;
+    week_start: string;
+    receipts_count: number;
+    ok_rate: number;
+    drop_point_share_pct: number;
+    active_anchors_count: number;
+}
+
+export interface EcoGamificationLevel {
+    id: number;
+    name: string;
+    min_score: number;
+    badge_url?: string;
+    color_hex: string;
+}
+
+export interface EcoGamificationBadge {
+    id: string;
+    slug: string;
+    name: string;
+    description: string;
+    icon_name: string;
+}
+
+export interface ProfileGamificationSummary {
+    user_id: string;
+    display_name: string;
+    impact_score: number;
+    badges_count: number;
+    level_id: number;
+    level_name: string;
+    level_color: string;
+    level_min: number;
+    next_level_min: number | null;
+    next_level_name: string | null;
+}
+
+export interface OnboardingState {
+    user_id: string;
+    step: 'start' | 'neighborhood' | 'mode' | 'address' | 'first_action' | 'done';
+    chosen_mode?: 'drop_point' | 'doorstep';
+    chosen_drop_point_id?: string;
+    chosen_window_id?: string;
+    completed_at?: string;
+    updated_at: string;
+}

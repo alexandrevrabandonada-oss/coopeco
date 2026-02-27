@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
 import { BottomNav, Header } from "@/components/layout";
+import { ProtectedRouteGate } from "@/components/protected-route-gate";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -30,7 +31,7 @@ export default function RootLayout({
           <div className="app-wrapper">
             <Header />
             <main className="main-content">
-              {children}
+              <ProtectedRouteGate>{children}</ProtectedRouteGate>
             </main>
             <BottomNav />
           </div>

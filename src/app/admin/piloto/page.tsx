@@ -1,17 +1,12 @@
-import Placeholder from "@/components/placeholder";
-import { isPilotFeatureEnabled } from "@/lib/features";
-import AdminPilotoClient from "./piloto-client";
+"use client";
+
+import { ProtectedRouteGate } from "@/components/protected-route-gate";
+import PilotoClient from "./piloto-client";
 
 export default function AdminPilotoPage() {
-  if (!isPilotFeatureEnabled()) {
-    return (
-      <Placeholder
-        title="Admin / Piloto"
-        backHref="/admin"
-        description="Feature ECO_FEATURES_PILOT desativada neste ambiente."
-      />
-    );
-  }
-
-  return <AdminPilotoClient />;
+  return (
+    <ProtectedRouteGate>
+      <PilotoClient />
+    </ProtectedRouteGate>
+  );
 }

@@ -43,6 +43,7 @@ export default function AdminPontosPage() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [neighborhoods, setNeighborhoods] = useState<NeighborhoodOption[]>([]);
   const [points, setPoints] = useState<EcoDropPoint[]>([]);
+  const [inactivityData, setInactivityData] = useState<any[]>([]);
   const [metrics7d, setMetrics7d] = useState<DropPointMetric7d[]>([]);
   const [metricsByWindow7d, setMetricsByWindow7d] = useState<DropPointMetricByWindow7d[]>([]);
 
@@ -88,6 +89,9 @@ export default function AdminPontosPage() {
         .order("requests_count", { ascending: false });
       if (metricsWindowError) throw metricsWindowError;
       setMetricsByWindow7d((metricsWindowData || []) as DropPointMetricByWindow7d[]);
+
+      const { data: inactRes } = await supabase.from("v_drop_point_inactivity_14d").select("*");
+      setInactivityData(inactRes || []);
     } catch (error) {
       setErrorMessage((error as Error).message);
     } finally {
@@ -264,21 +268,46 @@ export default function AdminPontosPage() {
           <p className="font-bold uppercase text-sm">Sem pontos cadastrados.</p>
         ) : (
           <div className="flex flex-col gap-3">
-            {points.map((point) => (
-              <div key={point.id} className="border-2 border-foreground bg-white p-3 flex items-center justify-between">
-                <div>
-                  <p className="font-black uppercase text-xs">{point.name}</p>
-                  <p className="font-bold text-xs uppercase">{point.address_public}</p>
-                  <p className="font-bold text-xs uppercase">Horários: {point.hours}</p>
-                  <p className="font-bold text-xs uppercase">
-                    Requests 7d: {metrics7d.find((row) => row.drop_point_id === point.id)?.requests_count || 0}
-                  </p>
+            {points.map((point) => {
+              const inact = inactivityData.find(d => d.drop_point_id === point.id);
+              return (
+                <div key={point.id} className="border-2 border-foreground bg-white p-3 flex items-center justify-between">
+                  <div>
+                    <div className="flex items-center gap-2 mb-1">
+                      <p className="font-black uppercase text-xs leading-none">{point.name}</p>
+                      {inact && (
+                        <span className={`text-[8px] font-black uppercase px-2 py-0.5 border-2 border-foreground ${inact.status === 'inactive' ? 'bg-accent text-white' :
+                            inact.status === 'stale' ? 'bg-yellow-400' : 'bg-primary'
+                          }`}>
+                          {inact.status}
+                        </span>
+                      )}
+                    </div>
+                    <p className="font-bold text-xs uppercase">{point.address_public}</p>
+                    <p className="font-bold text-xs uppercase">Horários: {point.hours}</p>
+                    <p className="font-bold text-[10px] uppercase opacity-60">
+                      Último pedido: {inact ? `${inact.days_since_last_request} dias` : 'N/A'}
+                    </p>
+                  </div>
+                  <div className="flex gap-2">
+                    {inact && (inact.status === 'stale' || inact.status === 'inactive') && (
+                      <button
+                        className="cta-button small"
+                        style={{ background: "var(--accent)", color: "white" }}
+                        onClick={() => {
+                          window.alert(`Promover reativação de ${point.name} no painel de Inteligência.`);
+                        }}
+                      >
+                        REATIVAR
+                      </button>
+                    )}
+                    <button className="cta-button small" style={{ background: "white" }} onClick={() => togglePoint(point)}>
+                      {point.active ? "Desativar" : "Ativar"}
+                    </button>
+                  </div>
                 </div>
-                <button className="cta-button small" style={{ background: "white" }} onClick={() => togglePoint(point)}>
-                  {point.active ? "Desativar" : "Ativar"}
-                </button>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>

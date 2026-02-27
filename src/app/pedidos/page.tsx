@@ -3,20 +3,29 @@
 import { useEffect, useState, useCallback } from "react"
 import { createClient } from "@/lib/supabase"
 import { useAuth } from "@/contexts/auth-context"
-import { Loader2, Package, Clock, CheckCircle2, Truck, FileText, ChevronRight } from "lucide-react"
+import { Package, Clock, CheckCircle2, Truck, FileText, ChevronRight } from "lucide-react"
 import Link from "next/link"
 import { PickupRequest } from "@/types/eco"
+import { LoadingBlock } from "@/components/loading-block"
+import { EmptyState } from "@/components/empty-state"
+import { ErrorState } from "@/components/error-state"
+import { RequireAuthCard } from "@/components/require-auth-card"
 
 export default function Pedidos() {
-    const { user } = useAuth()
+    const { user, isLoading: authLoading } = useAuth()
     const [requests, setRequests] = useState<PickupRequest[]>([])
     const [isLoading, setIsLoading] = useState(true)
+    const [errorMessage, setErrorMessage] = useState<string | null>(null)
     const supabase = createClient()
 
     const loadPedidos = useCallback(async () => {
-        if (!user) return
+        if (!user) {
+            setIsLoading(false)
+            return
+        }
         setIsLoading(true)
-        const { data } = await supabase
+        setErrorMessage(null)
+        const { data, error } = await supabase
             .from("pickup_requests")
             .select(`
         *,
@@ -26,7 +35,11 @@ export default function Pedidos() {
             .eq("created_by", user.id)
             .order("created_at", { ascending: false })
 
-        if (data) setRequests(data)
+        if (error) {
+            setErrorMessage(error.message)
+        } else if (data) {
+            setRequests(data)
+        }
         setIsLoading(false)
     }, [user, supabase])
 
@@ -37,22 +50,18 @@ export default function Pedidos() {
         return () => clearTimeout(timer)
     }, [loadPedidos])
 
-    if (isLoading) {
-        return (
-            <div className="flex items-center justify-center min-h-[50vh]">
-                <Loader2 className="animate-spin text-primary" size={48} />
-            </div>
-        )
-    }
+    if (authLoading || isLoading) return <LoadingBlock text="Carregando pedidos..." />
+    if (!user) return <RequireAuthCard body="Entre para acompanhar seus pedidos de coleta." />
+    if (errorMessage) return <ErrorState title="Não foi possível carregar pedidos" body={errorMessage} onRetry={loadPedidos} code="ECO_PEDIDOS_LOAD_FAIL" />
 
     if (requests.length === 0) {
         return (
-            <div className="card text-center py-12 animate-slide-up">
-                <Package size={48} className="mx-auto mb-4 text-muted" />
-                <h2 className="stencil-text mb-4">SEM PEDIDOS AINDA</h2>
-                <p className="mb-6 font-bold uppercase">SUAS AÇÕES APARECERÃO AQUI ASSIM QUE VOCÊ PEDIR UMA COLETA.</p>
-                <Link href="/pedir-coleta" className="cta-button mx-auto">PEDIR COLETA AGORA</Link>
-            </div>
+            <EmptyState
+                title="Sem pedidos ainda"
+                body="Suas ações aparecerão aqui assim que você pedir uma coleta."
+                ctaLabel="Pedir coleta agora"
+                ctaHref="/pedir-coleta"
+            />
         )
     }
 

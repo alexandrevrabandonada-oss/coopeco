@@ -4,11 +4,14 @@ import { useEffect, useState, useCallback, useMemo } from "react"
 import { createClient } from "@/lib/supabase"
 import { useAuth } from "@/contexts/auth-context"
 import { MediaObject, Post, Profile } from "@/types/eco"
-import { Loader2, Heart, MessageCircle, Share2, Shield, User, MapPin, ExternalLink } from "lucide-react"
+import { Heart, MessageCircle, Share2, Shield, User, MapPin, ExternalLink } from "lucide-react"
 import Link from "next/link"
 import { MediaPreview } from "@/components/media-preview"
 import { getSignedUrlsForEntity, type MediaEntityType } from "@/lib/storage-helpers"
 import { NeighborhoodErrorsWidget } from "@/components/neighborhood-errors-widget"
+import { LoadingBlock } from "@/components/loading-block"
+import { EmptyState } from "@/components/empty-state"
+import { ErrorState } from "@/components/error-state"
 
 export default function Mural() {
     const { profile } = useAuth()
@@ -16,6 +19,7 @@ export default function Mural() {
     const [mediaByEntity, setMediaByEntity] = useState<Record<string, MediaObject[]>>({})
     const [signedUrlsByMediaId, setSignedUrlsByMediaId] = useState<Record<string, string>>({})
     const [isLoading, setIsLoading] = useState(true)
+    const [errorMessage, setErrorMessage] = useState<string | null>(null)
     const supabase = useMemo(() => createClient(), [])
 
     const p = profile as Profile
@@ -23,9 +27,11 @@ export default function Mural() {
 
     const loadMural = useCallback(async () => {
         setIsLoading(true)
-        const query = supabase
-            .from("posts")
-            .select(`
+        setErrorMessage(null)
+        try {
+            const query = supabase
+                .from("posts")
+                .select(`
         *,
         author:profiles!posts_created_by_fkey(display_name),
         neighborhood:neighborhoods(name),
@@ -37,75 +43,81 @@ export default function Mural() {
           )
         )
       `)
-            .order("created_at", { ascending: false })
+                .order("created_at", { ascending: false })
 
-        if (p?.neighborhood_id) {
-            query.eq("neighborhood_id", p.neighborhood_id)
-        }
-
-        const { data } = await query
-
-        const safePosts = (data || []) as Post[]
-        setPosts(safePosts)
-
-        const receiptIds = safePosts
-            .filter((entry) => entry.receipt?.id)
-            .map((entry) => entry.receipt!.id)
-
-        const postIds = safePosts
-            .filter((entry) => entry.kind === "mutirao")
-            .map((entry) => entry.id)
-
-        const lookups: MediaObject[] = []
-        if (receiptIds.length > 0) {
-            const { data: receiptMedia } = await supabase
-                .from("media_objects")
-                .select("*")
-                .eq("entity_type", "receipt")
-                .in("entity_id", receiptIds)
-            lookups.push(...((receiptMedia || []) as MediaObject[]))
-        }
-
-        if (postIds.length > 0) {
-            const { data: postMedia } = await supabase
-                .from("media_objects")
-                .select("*")
-                .eq("entity_type", "post")
-                .in("entity_id", postIds)
-            lookups.push(...((postMedia || []) as MediaObject[]))
-        }
-
-        const map: Record<string, MediaObject[]> = {}
-        for (const media of lookups) {
-            const key = `${media.entity_type}:${media.entity_id}`
-            if (!map[key]) map[key] = []
-            map[key].push(media)
-        }
-        setMediaByEntity(map)
-
-        const entityKeys = Object.keys(map)
-        if (entityKeys.length === 0) {
-            setSignedUrlsByMediaId({})
-            setIsLoading(false)
-            return
-        }
-
-        const signedPayloads = await Promise.all(
-            entityKeys.map(async (key) => {
-                const [entityType, entityId] = key.split(":")
-                if (!entityType || !entityId) return []
-                return getSignedUrlsForEntity(entityType as MediaEntityType, entityId, 180)
-            }),
-        )
-
-        const signedMap: Record<string, string> = {}
-        for (const payload of signedPayloads) {
-            for (const item of payload) {
-                signedMap[item.media_id] = item.signed_url
+            if (p?.neighborhood_id) {
+                query.eq("neighborhood_id", p.neighborhood_id)
             }
+
+            const { data, error } = await query
+            if (error) throw error
+
+            const safePosts = (data || []) as Post[]
+            setPosts(safePosts)
+
+            const receiptIds = safePosts
+                .filter((entry) => entry.receipt?.id)
+                .map((entry) => entry.receipt!.id)
+
+            const postIds = safePosts
+                .filter((entry) => entry.kind === "mutirao")
+                .map((entry) => entry.id)
+
+            const lookups: MediaObject[] = []
+            if (receiptIds.length > 0) {
+                const { data: receiptMedia, error: receiptMediaError } = await supabase
+                    .from("media_objects")
+                    .select("*")
+                    .eq("entity_type", "receipt")
+                    .in("entity_id", receiptIds)
+                if (receiptMediaError) throw receiptMediaError
+                lookups.push(...((receiptMedia || []) as MediaObject[]))
+            }
+
+            if (postIds.length > 0) {
+                const { data: postMedia, error: postMediaError } = await supabase
+                    .from("media_objects")
+                    .select("*")
+                    .eq("entity_type", "post")
+                    .in("entity_id", postIds)
+                if (postMediaError) throw postMediaError
+                lookups.push(...((postMedia || []) as MediaObject[]))
+            }
+
+            const map: Record<string, MediaObject[]> = {}
+            for (const media of lookups) {
+                const key = `${media.entity_type}:${media.entity_id}`
+                if (!map[key]) map[key] = []
+                map[key].push(media)
+            }
+            setMediaByEntity(map)
+
+            const entityKeys = Object.keys(map)
+            if (entityKeys.length === 0) {
+                setSignedUrlsByMediaId({})
+                return
+            }
+
+            const signedPayloads = await Promise.all(
+                entityKeys.map(async (key) => {
+                    const [entityType, entityId] = key.split(":")
+                    if (!entityType || !entityId) return []
+                    return getSignedUrlsForEntity(entityType as MediaEntityType, entityId, 180)
+                }),
+            )
+
+            const signedMap: Record<string, string> = {}
+            for (const payload of signedPayloads) {
+                for (const item of payload) {
+                    signedMap[item.media_id] = item.signed_url
+                }
+            }
+            setSignedUrlsByMediaId(signedMap)
+        } catch (error) {
+            setErrorMessage((error as Error).message)
+        } finally {
+            setIsLoading(false)
         }
-        setSignedUrlsByMediaId(signedMap)
-        setIsLoading(false)
     }, [p, supabase])
 
     useEffect(() => {
@@ -115,7 +127,17 @@ export default function Mural() {
         return () => clearTimeout(timer)
     }, [loadMural])
 
-    if (isLoading) return <div className="flex justify-center py-20"><Loader2 className="animate-spin text-primary" size={48} /></div>
+    if (isLoading) return <LoadingBlock text="Carregando mural..." />
+    if (errorMessage) {
+        return (
+            <ErrorState
+                title="Não foi possível carregar o mural"
+                body={errorMessage === "Demorou demais" ? "Demorou demais para carregar o mural." : errorMessage}
+                onRetry={loadMural}
+                code={errorMessage === "Demorou demais" ? "ECO_MURAL_TIMEOUT" : "ECO_MURAL_LOAD_FAIL"}
+            />
+        )
+    }
 
     const qualityLabelMap = {
         ok: "OK",
@@ -237,10 +259,12 @@ export default function Mural() {
                 ))}
 
                 {posts.length === 0 && (
-                    <div className="card text-center py-12">
-                        <Shield size={48} className="mx-auto mb-4 text-muted/30" />
-                        <p className="font-bold text-muted uppercase">AINDA NÃO HÁ MOVIMENTAÇÕES NESTES TERRITÓRIO.</p>
-                    </div>
+                    <EmptyState
+                        title="Sem publicações por enquanto"
+                        body="Ainda não há posts. Seja o primeiro a registrar um recibo ou um mutirão."
+                        ctaLabel="Registrar no mural"
+                        ctaHref="/mural/novo"
+                    />
                 )}
             </div>
 

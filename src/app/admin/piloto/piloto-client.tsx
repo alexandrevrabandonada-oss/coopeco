@@ -1,227 +1,368 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { Loader2, ShieldOff, Target } from "lucide-react";
+import { useEffect, useState, useMemo } from "react";
 import { createClient } from "@/lib/supabase";
-import { useAuth } from "@/contexts/auth-context";
-import { Profile } from "@/types/eco";
+import { Neighborhood, PilotProgram, PilotProgramNeighborhood, PilotChecklist, PilotChecklistItem } from "@/types/eco";
+import { LoadingBlock } from "@/components/loading-block";
+import { Save, Target, Layout, Rocket, ArrowRight, CheckCircle2, Circle, Clock, Package, AlertTriangle, AlertCircle } from "lucide-react";
+import Link from "next/link";
+import { isAnchorsFeatureEnabled, isGalpaoFeatureEnabled } from "@/lib/features";
 
-interface NeighborhoodOption {
-  id: string;
-  name: string;
-  slug: string;
-}
-
-interface PilotConfigRow {
-  id: string;
-  neighborhood_id: string;
-  is_active: boolean;
-  default_window_capacity: number;
-  default_drop_point_target: number;
-  anchor_partner_target: number;
-  weekly_receipts_goal: number;
-  weekly_ok_rate_goal: number;
-  notes?: string | null;
-}
-
-export default function AdminPilotoClient() {
-  const { user, profile, isLoading: authLoading } = useAuth();
-  const p = profile as Profile | null;
+export default function PilotoClient() {
+  const [programs, setPrograms] = useState<PilotProgram[]>([]);
+  const [selectedProgramId, setSelectedProgramId] = useState("");
+  const [neighborhoods, setNeighborhoods] = useState<PilotProgramNeighborhood[]>([]);
+  const [checklists, setChecklists] = useState<PilotChecklist[]>([]);
+  const [items, setItems] = useState<PilotChecklistItem[]>([]);
+  const [opsSummary, setOpsSummary] = useState<any>(null);
+  const [opsAlerts, setOpsAlerts] = useState<any[]>([]);
+  const [inactivePoints, setInactivePoints] = useState<any[]>([]);
+  const [promotions, setPromotions] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
   const supabase = useMemo(() => createClient(), []);
 
-  const [isLoading, setIsLoading] = useState(true);
-  const [isSavingConfig, setIsSavingConfig] = useState(false);
-  const [isSavingGoal, setIsSavingGoal] = useState(false);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
-
-  const [neighborhoods, setNeighborhoods] = useState<NeighborhoodOption[]>([]);
-  const [selectedNeighborhoodId, setSelectedNeighborhoodId] = useState("");
-  const [selectedNeighborhoodSlug, setSelectedNeighborhoodSlug] = useState("");
-
-  const [isActive, setIsActive] = useState(true);
-  const [defaultWindowCapacity, setDefaultWindowCapacity] = useState(25);
-  const [defaultDropPointTarget, setDefaultDropPointTarget] = useState(3);
-  const [anchorPartnerTarget, setAnchorPartnerTarget] = useState(2);
-  const [weeklyReceiptsGoal, setWeeklyReceiptsGoal] = useState(100);
-  const [weeklyOkRateGoal, setWeeklyOkRateGoal] = useState(80);
-  const [notes, setNotes] = useState("");
-  const [weekStart, setWeekStart] = useState(new Date().toISOString().slice(0, 10));
-  const [goalReceipts, setGoalReceipts] = useState(100);
-  const [goalOkRate, setGoalOkRate] = useState(80);
-  const [goalDropPoints, setGoalDropPoints] = useState(3);
-  const [goalRecurringGenerated, setGoalRecurringGenerated] = useState(20);
-  const [goalNotes, setGoalNotes] = useState("");
-
-  const loadData = useCallback(async () => {
-    setIsLoading(true);
-    setErrorMessage(null);
-    try {
-      const { data: neighborhoodsData, error: neighborhoodsError } = await supabase
-        .from("neighborhoods")
-        .select("id, name, slug")
-        .order("name", { ascending: true });
-      if (neighborhoodsError) throw neighborhoodsError;
-      const safeNeighborhoods = (neighborhoodsData || []) as NeighborhoodOption[];
-      setNeighborhoods(safeNeighborhoods);
-
-      const selectedId = selectedNeighborhoodId || safeNeighborhoods[0]?.id || "";
-      const selectedSlug = safeNeighborhoods.find((n) => n.id === selectedId)?.slug || "";
-      setSelectedNeighborhoodId(selectedId);
-      setSelectedNeighborhoodSlug(selectedSlug);
-      if (!selectedId) return;
-
-      const { data: configData, error: configError } = await supabase
-        .from("pilot_configs")
-        .select("*")
-        .eq("neighborhood_id", selectedId)
-        .maybeSingle<PilotConfigRow>();
-      if (configError) throw configError;
-
-      if (configData) {
-        setIsActive(configData.is_active);
-        setDefaultWindowCapacity(configData.default_window_capacity);
-        setDefaultDropPointTarget(configData.default_drop_point_target);
-        setAnchorPartnerTarget(configData.anchor_partner_target);
-        setWeeklyReceiptsGoal(configData.weekly_receipts_goal);
-        setWeeklyOkRateGoal(Number(configData.weekly_ok_rate_goal || 0));
-        setNotes(configData.notes || "");
-      }
-    } catch (error) {
-      setErrorMessage((error as Error).message);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [selectedNeighborhoodId, supabase]);
-
   useEffect(() => {
-    loadData();
-  }, [loadData, user?.id]);
+    async function loadInitial() {
+      setLoading(true);
+      const { data: pData } = await supabase.from("pilot_programs").select("*").order("status", { ascending: false });
+      const availablePrograms = pData || [];
+      setPrograms(availablePrograms);
 
-  const saveConfig = async () => {
-    if (!selectedNeighborhoodId) return;
-    setIsSavingConfig(true);
-    setErrorMessage(null);
-    try {
-      const { error } = await supabase.from("pilot_configs").upsert(
-        {
-          neighborhood_id: selectedNeighborhoodId,
-          is_active: isActive,
-          default_window_capacity: defaultWindowCapacity,
-          default_drop_point_target: defaultDropPointTarget,
-          anchor_partner_target: anchorPartnerTarget,
-          weekly_receipts_goal: weeklyReceiptsGoal,
-          weekly_ok_rate_goal: weeklyOkRateGoal,
-          notes: notes.trim() || null,
-        },
-        { onConflict: "neighborhood_id" },
-      );
-      if (error) throw error;
-      await loadData();
-    } catch (error) {
-      setErrorMessage((error as Error).message);
-    } finally {
-      setIsSavingConfig(false);
+      if (availablePrograms.length > 0) {
+        const active = availablePrograms.find(p => p.status === 'active') || availablePrograms[0];
+        setSelectedProgramId(active.id);
+        await loadProgramData(active.id);
+      } else {
+        setLoading(false);
+      }
+    }
+    loadInitial();
+  }, [supabase]);
+
+  const loadProgramData = async (programId: string) => {
+    setLoading(true);
+    const [{ data: nData }, { data: cData }] = await Promise.all([
+      supabase.from("pilot_program_neighborhoods").select("*, neighborhood:neighborhoods(*)").eq("program_id", programId),
+      supabase.from("pilot_checklists").select("*").eq("program_id", programId)
+    ]);
+
+    setNeighborhoods(nData || []);
+    setChecklists(cData || []);
+
+    // Fetch items for these checklists
+    if (cData && cData.length > 0) {
+      const { data: iData } = await supabase
+        .from("pilot_checklist_items")
+        .select("*")
+        .in("checklist_id", cData.map(c => c.id));
+      setItems(iData || []);
+    } else {
+      setItems([]);
+    }
+    // Fetch intelligence summary (using the first neighborhood associated with the program)
+    if (nData && nData.length > 0) {
+      const neighborId = nData[0].neighborhood_id;
+
+      // Refresh alerts in DB
+      await supabase.rpc('rpc_refresh_ops_alerts', { p_neighborhood_id: neighborId });
+
+      const { data: summaryData } = await supabase
+        .from("v_neighborhood_ops_summary_7d")
+        .select("*")
+        .eq("neighborhood_id", neighborId)
+        .maybeSingle();
+      setOpsSummary(summaryData);
+
+      const { data: alertsData } = await supabase
+        .from("ops_alerts")
+        .select("*")
+        .eq("neighborhood_id", neighborId)
+        .eq("active", true);
+      setOpsAlerts(alertsData || []);
+
+      const { data: inactData } = await supabase
+        .from("v_drop_point_inactivity_14d")
+        .select("*")
+        .eq("neighborhood_id", neighborId)
+        .in("status", ["stale", "inactive"]);
+      setInactivePoints(inactData || []);
+
+      const { data: promoData } = await supabase
+        .from("drop_point_promotions")
+        .select("*, drop_point:eco_drop_points(name)")
+        .eq("neighborhood_id", neighborId)
+        .gte("expires_at", new Date().toISOString());
+      setPromotions(promoData || []);
+    } else {
+      setOpsSummary(null);
+      setOpsAlerts([]);
+      setInactivePoints([]);
+      setPromotions([]);
+    }
+
+    setLoading(false);
+  };
+
+  const handleProgramChange = (id: string) => {
+    setSelectedProgramId(id);
+    loadProgramData(id);
+  };
+
+  const generateBulletinContent = () => {
+    if (!opsSummary) return;
+    const blocks = [];
+    if (opsSummary.busiest_window_label) {
+      blocks.push(`🕒 Janela mais carregada: ${opsSummary.busiest_window_label}`);
+    }
+    if (opsSummary.busiest_drop_point_name) {
+      blocks.push(`📍 Ponto ECO mais movimentado: ${opsSummary.busiest_drop_point_name}`);
+    }
+    if (opsSummary.top_flags && opsSummary.top_flags.length > 0) {
+      blocks.push(`⚠️ Principais alertas de qualidade: ${opsSummary.top_flags.join(', ')}`);
+    }
+    const okRate = Math.round((opsSummary.ok_rate || 0) * 100);
+    blocks.push(`✅ Qualidade geral da semana: ${okRate}%`);
+
+    const text = blocks.join('\n');
+    alert(`Copiado para o boletim:\n\n${text}`);
+    // In a real scenario, this would update a bulletin field or clipboard
+    navigator.clipboard.writeText(text);
+  };
+
+  const toggleItemStatus = async (item: PilotChecklistItem) => {
+    const newStatus = item.status === 'done' ? 'todo' : 'done';
+    const { error } = await supabase
+      .from("pilot_checklist_items")
+      .update({
+        status: newStatus,
+        completed_at: newStatus === 'done' ? new Date().toISOString() : null
+      })
+      .eq("id", item.id);
+
+    if (error) alert(error.message);
+    else {
+      setItems(items.map(i => i.id === item.id ? { ...i, status: newStatus } : i));
     }
   };
 
-  const saveGoal = async () => {
-    if (!selectedNeighborhoodId) return;
-    setIsSavingGoal(true);
-    setErrorMessage(null);
-    try {
-      const { error } = await supabase.from("pilot_goals_weekly").upsert(
-        {
-          neighborhood_id: selectedNeighborhoodId,
-          week_start: weekStart,
-          target_receipts: goalReceipts,
-          target_ok_rate: goalOkRate,
-          target_drop_points: goalDropPoints,
-          target_recurring_generated: goalRecurringGenerated,
-          notes: goalNotes.trim() || null,
-        },
-        { onConflict: "neighborhood_id,week_start" },
-      );
-      if (error) throw error;
-    } catch (error) {
-      setErrorMessage((error as Error).message);
-    } finally {
-      setIsSavingGoal(false);
-    }
-  };
+  const program = programs.find(p => p.id === selectedProgramId);
 
-  if (authLoading || isLoading) {
-    return (
-      <div className="flex items-center justify-center min-h-[50vh]">
-        <Loader2 className="animate-spin text-primary" size={44} />
-      </div>
-    );
-  }
+  if (loading) return <LoadingBlock text="Carregando painel do piloto..." />;
 
-  if (!user || !p || p.role !== "operator") {
-    return (
-      <div className="card text-center py-12 animate-slide-up">
-        <ShieldOff size={48} className="mx-auto mb-4 text-accent" />
-        <h2 className="stencil-text mb-3">Acesso Restrito</h2>
-        <p className="font-bold uppercase">Somente operador configura o piloto.</p>
-      </div>
-    );
-  }
+  const statsByChecklist = checklists.map(c => {
+    const cItems = items.filter(i => i.checklist_id === c.id);
+    const done = cItems.filter(i => i.status === 'done').length;
+    return {
+      id: c.id,
+      title: c.title,
+      total: cItems.length,
+      done,
+      pct: cItems.length > 0 ? (done / cItems.length) * 100 : 0
+    };
+  });
 
   return (
     <div className="animate-slide-up pb-12">
-      <h1 className="stencil-text mb-6" style={{ fontSize: "2.2rem", background: "var(--primary)", padding: "0 10px", border: "2px solid var(--foreground)", width: "fit-content" }}>
-        ADMIN / PILOTO
-      </h1>
-
-      <div className="card mb-6">
-        <h2 className="stencil-text text-lg mb-4 flex items-center gap-2">
-          <Target size={18} /> Configuração do Bairro Piloto
-        </h2>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-3">
-          <select className="field" value={selectedNeighborhoodId} onChange={(e) => setSelectedNeighborhoodId(e.target.value)}>
-            {neighborhoods.map((n) => (
-              <option key={n.id} value={n.id}>{n.name}</option>
-            ))}
-          </select>
-          <label className="flex items-center gap-2">
-            <input type="checkbox" checked={isActive} onChange={(e) => setIsActive(e.target.checked)} />
-            <span className="font-black text-xs uppercase">Piloto ativo</span>
-          </label>
-          <a className="cta-button small" href={selectedNeighborhoodSlug ? `/bairros/${selectedNeighborhoodSlug}/transparencia` : "#"}>
-            Ver transparência
-          </a>
-          <input type="number" className="field" min={1} value={defaultWindowCapacity} onChange={(e) => setDefaultWindowCapacity(Number(e.target.value))} placeholder="Capacidade padrão" />
-          <input type="number" className="field" min={0} value={defaultDropPointTarget} onChange={(e) => setDefaultDropPointTarget(Number(e.target.value))} placeholder="Meta pontos ECO" />
-          <input type="number" className="field" min={0} value={anchorPartnerTarget} onChange={(e) => setAnchorPartnerTarget(Number(e.target.value))} placeholder="Meta parceiros âncora" />
-          <input type="number" className="field" min={0} value={weeklyReceiptsGoal} onChange={(e) => setWeeklyReceiptsGoal(Number(e.target.value))} placeholder="Meta semanal recibos" />
-          <input type="number" className="field" min={0} max={100} value={weeklyOkRateGoal} onChange={(e) => setWeeklyOkRateGoal(Number(e.target.value))} placeholder="Meta OK rate %" />
-          <input type="text" className="field" value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Notas operacionais (sem PII)" />
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
+        <div className="flex items-center gap-2">
+          <Rocket className="text-primary" size={32} />
+          <h1 className="stencil-text text-3xl">PILOT PACK VR</h1>
         </div>
-        <button className="cta-button small" onClick={saveConfig} disabled={isSavingConfig}>
-          {isSavingConfig ? "Salvando..." : "Salvar configuração piloto"}
-        </button>
+
+        <select
+          className="field max-w-xs"
+          value={selectedProgramId}
+          onChange={(e) => handleProgramChange(e.target.value)}
+        >
+          {programs.map(p => (
+            <option key={p.id} value={p.id}>{p.city} ({p.status.toUpperCase()})</option>
+          ))}
+        </select>
       </div>
 
-      <div className="card">
-        <h2 className="stencil-text text-lg mb-4">Metas Semanais</h2>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-3">
-          <input type="date" className="field" value={weekStart} onChange={(e) => setWeekStart(e.target.value)} />
-          <input type="number" className="field" min={0} value={goalReceipts} onChange={(e) => setGoalReceipts(Number(e.target.value))} placeholder="Recibos alvo" />
-          <input type="number" className="field" min={0} max={100} value={goalOkRate} onChange={(e) => setGoalOkRate(Number(e.target.value))} placeholder="OK rate alvo %" />
-          <input type="number" className="field" min={0} value={goalDropPoints} onChange={(e) => setGoalDropPoints(Number(e.target.value))} placeholder="Pontos alvo" />
-          <input type="number" className="field" min={0} value={goalRecurringGenerated} onChange={(e) => setGoalRecurringGenerated(Number(e.target.value))} placeholder="Recorrentes gerados alvo" />
-          <input type="text" className="field" value={goalNotes} onChange={(e) => setGoalNotes(e.target.value)} placeholder="Notas da semana (sem PII)" />
-        </div>
-        <button className="cta-button small" onClick={saveGoal} disabled={isSavingGoal}>
-          {isSavingGoal ? "Salvando..." : "Salvar meta semanal"}
-        </button>
-      </div>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        <div className="lg:col-span-2 flex flex-col gap-8">
+          {/* Resumo do Programa */}
+          <section className="card">
+            <h2 className="stencil-text text-lg mb-4 flex items-center gap-2">
+              <Layout size={20} /> PROGRAMA: {program?.city}
+            </h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div>
+                <span className="font-black text-[10px] uppercase text-muted">Bairros Cobertos</span>
+                <div className="flex flex-wrap gap-2 mt-2">
+                  {neighborhoods.map(pn => (
+                    <span key={pn.id} className="bg-primary/10 border border-primary px-2 py-1 font-bold text-xs uppercase">
+                      {pn.neighborhood?.name}
+                    </span>
+                  ))}
+                  {neighborhoods.length === 0 && <span className="text-muted-foreground text-xs font-bold uppercase italic">Nenhum bairro vinculado</span>}
+                </div>
+              </div>
+              <div className="flex flex-col gap-1">
+                <span className="font-black text-[10px] uppercase text-muted">Status do Programa</span>
+                <p className="font-black text-xl uppercase text-primary">{program?.status}</p>
+                {program?.starts_on && (
+                  <p className="font-bold text-[10px] uppercase">Lançamento: {new Date(program.starts_on).toLocaleDateString()}</p>
+                )}
+              </div>
+            </div>
+            {program?.notes_public && (
+              <div className="mt-6 p-4 bg-muted/20 border-l-4 border-foreground">
+                <span className="font-black text-[10px] uppercase text-muted d-block mb-1">Nota Pública</span>
+                <p className="font-bold text-sm italic">{program.notes_public}</p>
+              </div>
+            )}
+          </section>
 
-      {errorMessage && (
-        <div className="card mt-6" style={{ borderColor: "var(--accent)" }}>
-          <p className="font-bold text-xs uppercase">Erro: {errorMessage}</p>
+          {/* Alertas e Sugestões Operacionais */}
+          {opsAlerts.length > 0 && (
+            <section className="animate-slide-up">
+              <h3 className="stencil-text text-sm mb-4 flex items-center gap-2">
+                <AlertTriangle size={16} className="text-accent" /> SUGESTÕES DE AÇÃO
+              </h3>
+              <div className="flex flex-col gap-3">
+                {opsAlerts.map((alert, i) => (
+                  <div key={i} className="card border-2 border-accent bg-accent/5 p-4 flex gap-4 items-center">
+                    <div className="p-2 bg-accent text-white border-2 border-foreground shrink-0">
+                      <AlertCircle size={20} />
+                    </div>
+                    <div className="flex-1">
+                      <p className="font-black text-xs uppercase leading-tight">{alert.message}</p>
+                      <div className="mt-2 flex gap-2">
+                        {alert.kind.includes('capacity') && (
+                          <button className="text-[9px] font-black uppercase bg-primary px-2 py-1 border-2 border-foreground hover:translate-x-0.5 hover:translate-y-0.5">
+                            Abrir Vaga Extra
+                          </button>
+                        )}
+                        {alert.kind === 'quality_drop' && (
+                          <button className="text-[9px] font-black uppercase bg-white px-2 py-1 border-2 border-foreground hover:translate-x-0.5 hover:translate-y-0.5">
+                            Notificar Educativo
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
+
+          {/* Rituais e Checklists */}
+          <section className="flex flex-col gap-6">
+            <h2 className="stencil-text text-xl flex items-center gap-2">
+              <CheckCircle2 size={24} /> RITUAIS OPERACIONAIS
+            </h2>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {statsByChecklist.map(s => (
+                <div key={s.id} className="card bg-white hover:border-primary transition-colors">
+                  <div className="flex justify-between items-start mb-2">
+                    <h3 className="font-black text-sm uppercase">{s.title}</h3>
+                    <span className="font-black text-xs">{s.done}/{s.total}</span>
+                  </div>
+                  <div className="w-full bg-muted h-2 border border-foreground/10 overflow-hidden">
+                    <div
+                      className="h-full bg-primary transition-all duration-500"
+                      style={{ width: `${s.pct}%` }}
+                    />
+                  </div>
+                  <div className="flex flex-col gap-2 mt-4">
+                    {items.filter(i => i.checklist_id === s.id).map(item => (
+                      <button
+                        key={item.id}
+                        onClick={() => toggleItemStatus(item)}
+                        className={`flex items-center gap-2 text-left p-1 rounded hover:bg-muted/10 transition-colors ${item.status === 'done' ? 'opacity-60' : ''}`}
+                      >
+                        {item.status === 'done' ? <CheckCircle2 size={16} className="text-primary" /> : <Circle size={16} />}
+                        <span className={`text-xs font-bold uppercase ${item.status === 'done' ? 'line-through' : ''}`}>
+                          {item.title}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ))}
+              {checklists.length === 0 && (
+                <div className="card md:col-span-2 border-dashed flex flex-col items-center py-12 text-muted">
+                  <p className="font-black text-xs uppercase">Nenhum ritual definido para este programa</p>
+                  <button className="cta-button small mt-4">Criar Rituais Padrão</button>
+                </div>
+              )}
+            </div>
+          </section>
         </div>
-      )}
+
+        {/* Sidebar: Atalhos e Resumo 7 dias */}
+        <div className="flex flex-col gap-8">
+          <section className="card bg-foreground text-white border-foreground shadow-[4px_4px_0_0_rgba(0,0,0,1)]">
+            <h3 className="stencil-text text-sm mb-4 uppercase text-primary">Ações de Comando</h3>
+            <div className="flex flex-col gap-3">
+              <button className="cta-button small w-full justify-between" style={{ background: 'white' }}>
+                GERAR PEDIDOS RECORRENTES
+                <Rocket size={16} />
+              </button>
+              <Link href="/admin/galpao" className="cta-button small w-full justify-between" style={{ background: 'white' }}>
+                ABRIR GALPÃO
+                <Layout size={16} />
+              </Link>
+              <button className="cta-button small w-full justify-between" style={{ background: 'white' }}>
+                PUBLICAR BOLETIM
+                <Package size={16} />
+              </button>
+            </div>
+          </section>
+
+          <section className="card">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="stencil-text text-sm uppercase flex items-center gap-2">
+                <Clock size={16} /> RESUMO 7 DIAS
+              </h3>
+              <button
+                onClick={generateBulletinContent}
+                disabled={!opsSummary}
+                className="text-[9px] font-black uppercase bg-primary px-2 py-1 border-2 border-foreground hover:translate-x-0.5 hover:translate-y-0.5"
+              >
+                Gerar Blocos do Boletim
+              </button>
+            </div>
+            <div className="flex flex-col gap-4">
+              <div className="flex justify-between items-center border-b border-foreground/5 pb-2">
+                <span className="font-bold text-[10px] uppercase">Total de Coletas</span>
+                <span className="font-black text-sm">{opsSummary?.total_receipts || 0}</span>
+              </div>
+              <div className="flex justify-between items-center border-b border-foreground/5 pb-2">
+                <span className="font-bold text-[10px] uppercase">Qualidade Média</span>
+                <span className="font-black text-sm">{Math.round((opsSummary?.ok_rate || 0) * 100)}%</span>
+              </div>
+              <div className="flex justify-between items-center border-b border-foreground/5 pb-2">
+                <span className="font-bold text-[10px] uppercase">Fila Prevista (7d)</span>
+                <span className="font-black text-sm">{opsSummary?.total_requests || 0}</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="font-bold text-[10px] uppercase">Cobertura Recorrência</span>
+                <span className="font-black text-sm">{Math.round((opsSummary?.recurring_coverage_pct || 0) * 100)}%</span>
+              </div>
+            </div>
+          </section>
+
+          <div className="flex flex-col gap-3">
+            <Link href="/admin/rotas" className="card hover:bg-muted/5 transition-colors flex items-center justify-between py-3 px-4 bg-white/50">
+              <span className="font-black text-[10px] uppercase">Logística & Rotas</span>
+              <ArrowRight size={14} />
+            </Link>
+            <Link href="/admin/ancoras" className="card hover:bg-muted/5 transition-colors flex items-center justify-between py-3 px-4 bg-white/50">
+              <span className="font-black text-[10px] uppercase">Monitor Âncoras</span>
+              <ArrowRight size={14} />
+            </Link>
+            <Link href="/governança" className="card hover:bg-muted/5 transition-colors flex items-center justify-between py-3 px-4 bg-white/50">
+              <span className="font-black text-[10px] uppercase">Livro de Decisões</span>
+              <ArrowRight size={14} />
+            </Link>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

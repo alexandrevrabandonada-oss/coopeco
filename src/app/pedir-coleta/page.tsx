@@ -7,6 +7,7 @@ import { useAuth } from "@/contexts/auth-context"
 import { Recycle, Plus, Trash2, ArrowRight, ArrowLeft, Loader2, Clock, MapPin } from "lucide-react"
 import { EcoDropPoint, Profile, RouteWindow } from "@/types/eco"
 import { formatWindowLabel, getNextWindowOccurrence } from "@/lib/route-windows"
+import { RequireAuthCard } from "@/components/require-auth-card"
 
 type Item = {
     material: string
@@ -38,6 +39,20 @@ export default function PedirColeta() {
 
     useEffect(() => {
         const run = async () => {
+            if (!user) return;
+
+            // Soft-redirection check
+            const { data: onboarding } = await supabase
+                .from("onboarding_state")
+                .select("step")
+                .eq("user_id", user.id)
+                .maybeSingle();
+
+            if (onboarding && !['first_action', 'done'].includes(onboarding.step)) {
+                router.push("/começar");
+                return;
+            }
+
             if (!p?.neighborhood_id) return
             setIsLoadingWindows(true)
             const { data, error } = await supabase
@@ -47,7 +62,7 @@ export default function PedirColeta() {
                 .eq("active", true)
                 .order("weekday", { ascending: true })
                 .order("start_time", { ascending: true })
-
+            // ... rest of the logic ...
             if (error) {
                 setErrorMessage("Não foi possível carregar as janelas do bairro.")
             } else {
@@ -77,15 +92,11 @@ export default function PedirColeta() {
         }
 
         run()
-    }, [p?.neighborhood_id, supabase])
+    }, [p?.neighborhood_id, supabase, user, router])
 
     if (!user || !profile || profile.role !== 'resident') {
         return (
-            <div className="card text-center py-12">
-                <h2 className="stencil-text mb-4">ACESSO NECESSÁRIO</h2>
-                <p className="mb-6 font-bold">VOCÊ PRECISA ESTAR LOGADO PARA PEDIR UMA COLETA.</p>
-                <button onClick={() => router.push('/perfil')} className="cta-button mx-auto">IR PARA LOGIN</button>
-            </div>
+            <RequireAuthCard body="Você precisa estar logado para pedir uma coleta." />
         )
     }
 

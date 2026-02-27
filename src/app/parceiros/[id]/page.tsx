@@ -15,6 +15,7 @@ export default function PartnerImpact({ params }: { params: Promise<{ id: string
   const [rank, setRank] = useState<PartnerRank | null>(null);
   const [history, setHistory] = useState<TransparencyMonth[]>([]);
   const [anchor, setAnchor] = useState<PartnerAnchor | null>(null);
+  const [gamification, setGamification] = useState<any | null>(null);
   const [windows, setWindows] = useState<RouteWindow[]>([]);
   const [commitments, setCommitments] = useState<AnchorCommitment[]>([]);
   const [partnerNeighborhoodId, setPartnerNeighborhoodId] = useState<string>("");
@@ -63,13 +64,15 @@ export default function PartnerImpact({ params }: { params: Promise<{ id: string
         }
       }
 
-      const [{ data: anchorData }, { data: partnerData }, { data: commitmentData }] = await Promise.all([
+      const [{ data: anchorData }, { data: partnerData }, { data: commitmentData }, { data: gamiData }] = await Promise.all([
         supabase.from("partner_anchors").select("*").eq("partner_id", id).maybeSingle(),
         supabase.from("partners").select("id, neighborhood_id").eq("id", id).maybeSingle(),
         supabase.from("anchor_commitments").select("*").eq("partner_id", id).order("created_at", { ascending: false }).limit(12),
+        supabase.from("v_partner_gamification_summary").select("*").eq("partner_id", id).maybeSingle()
       ]);
       setAnchor((anchorData || null) as PartnerAnchor | null);
       setCommitments((commitmentData || []) as AnchorCommitment[]);
+      setGamification(gamiData);
 
       const neighborhoodId = (partnerData?.neighborhood_id as string | undefined) || p?.neighborhood_id || "";
       setPartnerNeighborhoodId(neighborhoodId);
@@ -140,6 +143,12 @@ export default function PartnerImpact({ params }: { params: Promise<{ id: string
             {anchor?.active && (
               <span className="font-black text-xs uppercase bg-white px-1 border border-foreground">
                 ÂNCORA {anchor.anchor_level.toUpperCase()}
+              </span>
+            )}
+            {gamification && (
+              <span className="font-black text-xs uppercase px-1 border border-foreground shadow-[2px_2px_0_0_rgba(0,0,0,1)]"
+                style={{ background: gamification.level_color, color: 'white' }}>
+                NÍVEL {gamification.level_name.toUpperCase()}
               </span>
             )}
           </div>

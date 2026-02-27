@@ -1,0 +1,50 @@
+
+> eco@0.1.0 db:apply
+> node tools/eco-db-apply.mjs
+
+[dotenv@17.3.1] injecting env (4) from .env.local -- tip: ­ƒøí´©Å auth for agents: https://vestauth.com
+[INFO] TLS verified com CA local: C:\Projetos\COOP ECO\tools\_tls\eco-supabase-ca.pem
+[SKIP] 20260225000100_eco_init.sql
+[SKIP] 20260225000200_eco_testpack_rpc.sql
+[SKIP] 20260225000300_eco_seed.sql
+[SKIP] 20260225000400_eco_rls_recursion_fix.sql
+[SKIP] 20260225000500_eco_rls_assignment_fix.sql
+[SKIP] 20260225190000_impact_metrics.sql
+[SKIP] 20260225191000_ranking_views.sql
+[SKIP] 20260225191700_eco_postgrest_schema_reload.sql
+[SKIP] 20260225192000_eco_posts_rls.sql
+[SKIP] 20260225200000_eco_payout_infrastructure.sql
+[SKIP] 20260225201000_eco_payout_seed.sql
+[SKIP] 20260225202000_eco_receipts_items_fix.sql
+[SKIP] 20260225213000_eco_payout_adjustments.sql
+[SKIP] 20260225214000_eco_payout_adjustments_fix.sql
+[SKIP] 20260226000000_eco_pilot_pack.sql
+[SKIP] 20260226100000_eco_admin_audit_log.sql
+[SKIP] 20260226101000_eco_dryrun_cleanup.sql
+[SKIP] 20260226120000_eco_media_tables.sql
+[SKIP] 20260226121000_eco_storage_policies.sql
+[SKIP] 20260226122000_eco_pickup_flow_policies.sql
+[SKIP] 20260226125000_fix_audit_function.sql
+[APPLY] 20260226125500_eco_gamification.sql
+[SKIP] 20260226130000_eco_request_guardrails.sql
+[SKIP] 20260226131000_eco_request_guardrails_service_role_fix.sql
+[SKIP] 20260226140000_eco_route_windows_recurrence.sql
+[SKIP] 20260226150000_eco_drop_points.sql
+[SKIP] 20260226160000_eco_quality_education.sql
+[SKIP] 20260226170000_eco_drop_point_ops_pack.sql
+[SKIP] 20260226173000_eco_route_base_hardening.sql
+[SKIP] 20260226174000_eco_recurring_occurrences_rpc.sql
+[SKIP] 20260226181000_eco_recurring_rpc_conflict_fix.sql
+[SKIP] 20260226182000_eco_request_guardrails_recurring_operator.sql
+[SKIP] 20260226201000_eco_notifications.sql
+[SKIP] 20260226210000_eco_pilot_pack_vr.sql
+[SKIP] 20260226213000_eco_anchor_commitments.sql
+[SKIP] 20260226220000_eco_galpao_v0.sql
+[SKIP] 20260226224000_eco_governanca_do_comum.sql
+[SKIP] 20260226233000_eco_pilot_pack.sql
+[SUCCESS] PostgREST schema reload notified.
+
+--- ECO DB APPLY SUMMARY ---
+Applied: 1
+Skipped: 37
+Errors: 0

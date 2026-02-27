@@ -1,84 +1,77 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
-import { Loader2, Bell, ShieldOff } from "lucide-react";
+import { Bell } from "lucide-react";
 import { createClient } from "@/lib/supabase";
 import { useAuth } from "@/contexts/auth-context";
-import { Profile, UserNotification } from "@/types/eco";
+import { UserNotification } from "@/types/eco";
+import { LoadingBlock } from "@/components/loading-block";
+import { EmptyState } from "@/components/empty-state";
+import { ErrorState } from "@/components/error-state";
+import { RequireAuthCard } from "@/components/require-auth-card";
+import { useQueryState } from "@/hooks/use-query-state";
 
 export default function NotificacoesPage() {
-  const { user, profile, isLoading: authLoading } = useAuth();
-  const p = profile as Profile | null;
+  const { user, profile, session, isLoading: authLoading } = useAuth();
   const supabase = useMemo(() => createClient(), []);
-
-  const [rows, setRows] = useState<UserNotification[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
-  const load = useCallback(async () => {
-    if (!user) return;
-    setIsLoading(true);
-    setErrorMessage(null);
-    try {
-      const { data, error } = await supabase
-        .from("user_notifications")
-        .select("*")
-        .eq("user_id", user.id)
-        .order("is_read", { ascending: true })
-        .order("created_at", { ascending: false })
-        .limit(100);
-      if (error) throw error;
-      setRows((data || []) as UserNotification[]);
-    } catch (error) {
-      setErrorMessage((error as Error).message);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [supabase, user]);
+  const query = useQueryState<UserNotification[]>(
+    async (signal) => {
+      if (!session?.access_token) throw new Error("AUTH_REQUIRED");
+      const response = await fetch("/api/notifications/list", {
+        method: "GET",
+        cache: "no-store",
+        headers: { Authorization: `Bearer ${session.access_token}` },
+        signal,
+      });
+      const payload = (await response.json().catch(() => null)) as { items?: UserNotification[]; error?: string } | null;
+      if (response.status === 401 || response.status === 403) throw new Error("AUTH_REQUIRED");
+      if (!response.ok) throw new Error(payload?.error || "Falha ao buscar notificações.");
+      return (payload?.items || []) as UserNotification[];
+    },
+    [session?.access_token, user?.id],
+  );
 
-  useEffect(() => {
-    load();
-  }, [load]);
+  const rows = query.data || [];
+  const unreadIds = rows.filter((row) => !row.is_read).map((row) => row.id);
 
   const markRead = async (ids: string[] | null) => {
     if (!user) return;
     setIsSaving(true);
-    setErrorMessage(null);
+    setSaveError(null);
     try {
       const { error } = await supabase.rpc("rpc_mark_notifications_read", {
         ids,
         mark_all: !ids || ids.length === 0,
       });
       if (error) throw error;
-      await load();
+      await query.refetch();
     } catch (error) {
-      setErrorMessage((error as Error).message);
+      setSaveError((error as Error).message);
     } finally {
       setIsSaving(false);
     }
   };
 
-  if (authLoading || isLoading) {
+  if (authLoading) return <LoadingBlock text="Carregando sessão..." />;
+  if (!user || !profile || query.error === "AUTH_REQUIRED") {
+    console.error("ECO_NOTIF_401");
+    return <RequireAuthCard body="Entre na sua conta para ver notificações." />;
+  }
+  if (query.status === "loading" || query.status === "idle") return <LoadingBlock text="Carregando notificações..." />;
+  if (query.status === "error") {
     return (
-      <div className="flex items-center justify-center min-h-[50vh]">
-        <Loader2 className="animate-spin text-primary" size={44} />
-      </div>
+      <ErrorState
+        title="Não foi possível carregar notificações"
+        body={query.error || "Tente novamente em instantes."}
+        onRetry={query.refetch}
+        code={query.error === "Demorou demais" ? "ECO_NOTIF_TIMEOUT" : "ECO_NOTIF_LOAD_FAIL"}
+      />
     );
   }
-
-  if (!user || !p) {
-    return (
-      <div className="card text-center py-12 animate-slide-up">
-        <ShieldOff size={48} className="mx-auto mb-4 text-accent" />
-        <h2 className="stencil-text mb-3">Acesso Restrito</h2>
-        <p className="font-bold uppercase">Entre na sua conta para ver notificações.</p>
-      </div>
-    );
-  }
-
-  const unreadIds = rows.filter((row) => !row.is_read).map((row) => row.id);
 
   return (
     <div className="animate-slide-up pb-12">
@@ -101,21 +94,22 @@ export default function NotificacoesPage() {
             <Bell size={18} /> Centro de alertas
           </h2>
           <button className="cta-button small" disabled={isSaving || unreadIds.length === 0} onClick={() => markRead(unreadIds)}>
-            {isSaving ? "Salvando..." : "Marcar tudo como lidas"}
+            {isSaving ? "Salvando..." : "Marcar como lidas"}
           </button>
         </div>
       </div>
 
-      {errorMessage && (
-        <div className="card mb-6" style={{ borderColor: "var(--accent)" }}>
-          <p className="font-bold text-sm uppercase">Erro: {errorMessage}</p>
-        </div>
+      {saveError && (
+        <ErrorState
+          title="Não foi possível atualizar notificações"
+          body={saveError}
+          onRetry={() => markRead(unreadIds)}
+          code="ECO_NOTIF_MARK_READ_FAIL"
+        />
       )}
 
-      {rows.length === 0 ? (
-        <div className="card">
-          <p className="font-bold uppercase text-sm">Nenhuma notificação no momento.</p>
-        </div>
+      {query.status === "empty" ? (
+        <EmptyState title="Sem alertas por enquanto" body="Novos eventos da sua rotina vão aparecer aqui." />
       ) : (
         <div className="flex flex-col gap-3">
           {rows.map((row) => (
@@ -144,3 +138,4 @@ export default function NotificacoesPage() {
     </div>
   );
 }
+
