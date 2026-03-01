@@ -6,6 +6,7 @@ import { useAuth } from "@/contexts/auth-context";
 import { Loader2, Route, ShieldOff } from "lucide-react";
 import { Profile, RecurringSubscription, RouteWindow } from "@/types/eco";
 import { formatWindowLabel } from "@/lib/route-windows";
+import Link from "next/link";
 
 interface NeighborhoodOption {
   id: string;
@@ -58,27 +59,27 @@ interface OccurrenceRow {
   request_id?: string | null;
   created_at: string;
   subscription?:
-    | {
-        created_by?: string | null;
-        fulfillment_mode?: "doorstep" | "drop_point";
-      }
-    | Array<{
-        created_by?: string | null;
-        fulfillment_mode?: "doorstep" | "drop_point";
-      }>
-    | null;
+  | {
+    created_by?: string | null;
+    fulfillment_mode?: "doorstep" | "drop_point";
+  }
+  | Array<{
+    created_by?: string | null;
+    fulfillment_mode?: "doorstep" | "drop_point";
+  }>
+  | null;
   window?:
-    | {
-        weekday: number;
-        start_time: string;
-        end_time: string;
-      }
-    | Array<{
-        weekday: number;
-        start_time: string;
-        end_time: string;
-      }>
-    | null;
+  | {
+    weekday: number;
+    start_time: string;
+    end_time: string;
+  }
+  | Array<{
+    weekday: number;
+    start_time: string;
+    end_time: string;
+  }>
+  | null;
 }
 
 export default function AdminRotasPage() {
@@ -278,6 +279,11 @@ export default function AdminRotasPage() {
 
   return (
     <div className="animate-slide-up pb-12">
+      {/* A56 Breadcrumb */}
+      <Link href="/admin" className="text-[10px] font-black uppercase text-muted underline mb-4 flex w-fit">
+        &lt; VOLTAR PARA O PAINEL ADMIN
+      </Link>
+
       <h1
         className="stencil-text mb-6"
         style={{

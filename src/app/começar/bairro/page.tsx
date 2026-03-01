@@ -62,6 +62,11 @@ export default function OnboardingNeighborhood() {
 
     return (
         <div className="flex flex-col gap-6 animate-slide-up">
+            {/* A56: Onboarding Escape Hatch */}
+            <Link href="/" className="text-[10px] font-black uppercase text-muted underline w-fit flex items-center gap-1">
+                &lt; FECHAR E VOLTAR AO MAPA
+            </Link>
+
             <div className="space-y-1">
                 <h2 className="stencil-text text-2xl uppercase">Qual seu território?</h2>
                 <p className="font-bold text-xs text-muted-foreground uppercase">Precisamos localizar suas rotas locais.</p>

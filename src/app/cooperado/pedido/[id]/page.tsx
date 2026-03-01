@@ -8,6 +8,9 @@ import { Loader2, ArrowLeft, Truck, CheckCircle2, User, Phone, MapPin } from "lu
 import { MediaUpload } from "@/components/media-upload"
 import { PickupRequest } from "@/types/eco"
 import { uploadMediaFiles } from "@/lib/storage-helpers"
+import { useSync } from "@/lib/offline/sync-provider"
+import { ecoCache } from "@/lib/offline/db"
+import { OfflineBanner } from "@/components/offline-banner"
 
 const QUALITY_FLAGS = [
     { value: "food", label: "RESIDUO ORGANICO" },
@@ -28,6 +31,7 @@ export default function GerenciarColeta({ params }: { params: Promise<{ id: stri
     const [qualityStatus, setQualityStatus] = useState<"ok" | "attention" | "contaminated">("ok")
     const [qualityNotes, setQualityNotes] = useState("")
     const [contaminationFlags, setContaminationFlags] = useState<string[]>([])
+    const sync = useSync();
     const supabase = useMemo(() => createClient(), [])
 
     const makeReceiptCode = () =>
@@ -46,7 +50,15 @@ export default function GerenciarColeta({ params }: { params: Promise<{ id: stri
             .eq("id", id)
             .single()
 
-        if (data) setRequest(data)
+        if (data) {
+            setRequest(data);
+            ecoCache.set(`request_${id}`, data);
+        } else {
+            if (!navigator.onLine) {
+                const cached = await ecoCache.get<PickupRequest>(`request_${id}`);
+                if (cached) setRequest(cached);
+            }
+        }
         setIsLoading(false)
     }, [id, supabase])
 
@@ -56,6 +68,14 @@ export default function GerenciarColeta({ params }: { params: Promise<{ id: stri
 
     const updateStatus = async (status: 'en_route' | 'collected') => {
         setIsUpdating(true)
+
+        if (!navigator.onLine) {
+            await sync.enqueue('set_status', { id, status });
+            if (request) setRequest({ ...request, status });
+            setIsUpdating(false);
+            return;
+        }
+
         try {
             const { error } = await supabase
                 .from("pickup_requests")
@@ -79,43 +99,56 @@ export default function GerenciarColeta({ params }: { params: Promise<{ id: stri
         }
 
         setIsUpdating(true)
+
+        const receiptData = {
+            request_id: id,
+            cooperado_id: user?.id,
+            receipt_code: makeReceiptCode(),
+            final_notes: receiptNotes,
+            quality_status: qualityStatus,
+            quality_notes: qualityNotes || null,
+            contamination_flags: contaminationFlags.length > 0 ? contaminationFlags : null,
+        };
+
+        if (!navigator.onLine) {
+            const receiptId = crypto.randomUUID();
+            await sync.enqueue('create_receipt', { request_id: id, data: { ...receiptData, id: receiptId } });
+
+            await sync.enqueue('upload_media', {
+                files: selectedFiles,
+                entityType: 'receipt',
+                entityId: receiptId
+            });
+
+            if (request) setRequest({ ...request, status: 'collected' });
+            setIsUpdating(false);
+            alert("Sinal fraco. Recibo salvo localmente e será enviado assim que houver internet.");
+            router.push('/cooperado');
+            return;
+        }
+
         try {
-            // 1) Cria recibo
             const { data: receipt, error: receiptError } = await supabase
                 .from("receipts")
-                .insert({
-                    request_id: id,
-                    cooperado_id: user?.id,
-                    receipt_code: makeReceiptCode(),
-                    final_notes: receiptNotes,
-                    quality_status: qualityStatus,
-                    quality_notes: qualityNotes || null,
-                    contamination_flags: contaminationFlags.length > 0 ? contaminationFlags : null,
-                })
+                .insert(receiptData)
                 .select()
                 .single()
 
             if (receiptError) throw receiptError
 
-            // 2) Sobe provas de midia e registra metadados
             const uploadedMedia = await uploadMediaFiles(selectedFiles, "receipt", receipt.id)
 
             if (uploadedMedia.length > 0) {
                 const { error: updateReceiptMediaError } = await supabase
                     .from("receipts")
-                        .update({
+                    .update({
                         proof_photo_path: uploadedMedia[0].path,
-                        final_notes: receiptNotes,
-                        quality_status: qualityStatus,
-                        quality_notes: qualityNotes || null,
-                        contamination_flags: contaminationFlags.length > 0 ? contaminationFlags : null,
                     })
                     .eq("id", receipt.id)
 
                 if (updateReceiptMediaError) throw updateReceiptMediaError
             }
 
-            // 3) Atualiza status da request
             const { error: updateError } = await supabase
                 .from("pickup_requests")
                 .update({ status: 'collected' })
@@ -123,7 +156,6 @@ export default function GerenciarColeta({ params }: { params: Promise<{ id: stri
 
             if (updateError) throw updateError
 
-            // 4) Automacao social (post de recibo)
             if (request?.neighborhood_id) {
                 await supabase.from("posts").insert({
                     receipt_id: receipt.id,
@@ -152,6 +184,8 @@ export default function GerenciarColeta({ params }: { params: Promise<{ id: stri
                 <ArrowLeft size={16} /> VOLTAR AO PAINEL
             </button>
 
+            <OfflineBanner />
+
             <div className="card p-0 overflow-hidden mb-8">
                 <div className="p-4 bg-foreground text-background flex justify-between items-center">
                     <span className="stencil-text text-sm">GESTÃO DE COLETA</span>
@@ -164,7 +198,7 @@ export default function GerenciarColeta({ params }: { params: Promise<{ id: stri
                             <User className="text-muted" size={20} />
                             <div>
                                 <span className="text-[10px] font-black uppercase text-muted">MORADOR</span>
-                                <span className="text-secondary font-black uppercase">SOLICITANTE: <strong className="text-foreground">{request.resident?.display_name}</strong></span>
+                                <p className="text-secondary font-black uppercase">SOLICITANTE: <strong className="text-foreground">{request.resident?.display_name}</strong></p>
                             </div>
                         </div>
                         <div className="flex items-center gap-3">

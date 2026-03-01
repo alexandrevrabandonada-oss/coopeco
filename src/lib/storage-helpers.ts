@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase"
+import { reportObsEventThrottled } from "@/lib/obs"
 
 export type MediaEntityType = "receipt" | "post";
 
@@ -95,6 +96,14 @@ export async function getSignedUrlByMediaId(
     )
 
     if (!response.ok) {
+        reportObsEventThrottled({
+            event_kind: 'signedurl_fail',
+            severity: 'warn',
+            context_kind: 'api',
+            context_key: '/api/media/signed-url',
+            message: `Falha ao obter signed URL para media_id: ${mediaId}`,
+            meta: { status: response.status }
+        });
         return null
     }
 
@@ -130,6 +139,14 @@ export async function getSignedUrlsForEntity(
     )
 
     if (!response.ok) {
+        reportObsEventThrottled({
+            event_kind: 'signedurl_fail',
+            severity: 'warn',
+            context_kind: 'api',
+            context_key: '/api/media/signed-url',
+            message: `Falha ao obter signed URLs para ${entityType}:${entityId}`,
+            meta: { status: response.status }
+        });
         return []
     }
 
@@ -195,7 +212,17 @@ export async function uploadMediaFiles(
                 upsert: false,
             })
 
-        if (uploadError) throw uploadError
+        if (uploadError) {
+            reportObsEventThrottled({
+                event_kind: 'upload_fail',
+                severity: 'error',
+                context_kind: 'feature',
+                context_key: 'storage_upload',
+                message: `Falha no upload de mídia: ${uploadError.message}`,
+                meta: { entityType, entityId, fileName }
+            });
+            throw uploadError
+        }
 
         const { data: mediaRow, error: mediaError } = await supabase
             .from("media_objects")

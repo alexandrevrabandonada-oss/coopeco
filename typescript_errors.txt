@@ -1,0 +1,7 @@
+src/app/api/admin/launch/route.ts(2,30): error TS2307: Cannot find module '@/lib/supabase-server' or its corresponding type declarations.
+src/app/come├ºar/acao/page.tsx(39,32): error TS18047: 'user' is possibly 'null'.
+src/app/come├ºar/acao/page.tsx(48,85): error TS18047: 'p' is possibly 'null'.
+tests/ui/drop-point-flow.spec.ts(214,31): error TS2339: Property 'id' does not exist on type 'never'.
+tests/ui/drop-point-flow.spec.ts(219,39): error TS2339: Property 'id' does not exist on type 'never'.
+tests/ui/drop-point-flow.spec.ts(224,25): error TS2339: Property 'id' does not exist on type 'never'.
+tests/ui/drop-point-flow.spec.ts(232,85): error TS2339: Property 'receipt_code' does not exist on type 'never'.

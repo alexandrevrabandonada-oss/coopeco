@@ -6,6 +6,7 @@ import { EcoDropPoint } from "@/types/eco";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { Recycle, Truck, ArrowRight, CheckCircle2 } from "lucide-react";
+import Link from "next/link";
 
 export default function OnboardingMode() {
     const { user, profile } = useAuth();
@@ -63,6 +64,11 @@ export default function OnboardingMode() {
 
     return (
         <div className="flex flex-col gap-8 animate-slide-up">
+            {/* A56: Onboarding Escape Hatch */}
+            <Link href="/começar/bairro" className="text-[10px] font-black uppercase text-muted underline w-fit flex items-center gap-1">
+                &lt; VOLTAR E ESCOLHER OUTRO BAIRRO
+            </Link>
+
             <div className="space-y-1">
                 <h2 className="stencil-text text-2xl uppercase">Como prefere agir?</h2>
                 <p className="font-bold text-xs text-muted-foreground uppercase">Escolha o modo mais prático para sua rotina.</p>

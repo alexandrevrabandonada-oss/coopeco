@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, CalendarRange, Loader2, MapPin } from "lucide-react";
+import { ArrowLeft, CalendarRange, Loader2, MapPin, Award } from "lucide-react";
 import { createClient } from "@/lib/supabase";
 import { WeeklyBulletin } from "@/types/eco";
 import { LoadingBlock } from "@/components/loading-block";
@@ -54,6 +54,7 @@ export default function BairroTransparenciaClient({ params }: { params: { slug: 
   const [lotRows, setLotRows] = useState<LotSanitizedRow[]>([]);
   const [bulletin, setBulletin] = useState<any | null>(null);
   const [opsSummary, setOpsSummary] = useState<any | null>(null);
+  const [activeAnchors, setActiveAnchors] = useState<any[]>([]);
   const [promotion, setPromotion] = useState<any | null>(null);
 
   useEffect(() => {
@@ -123,6 +124,13 @@ export default function BairroTransparenciaClient({ params }: { params: { slug: 
             .gte("ends_at", new Date().toISOString())
             .maybeSingle();
           setPromotion(promoData);
+          // Load active anchors
+          const { data: anchorsData } = await supabase
+            .from("eco_partner_status")
+            .select("*, partner:partners(name)")
+            .eq("status", "anchor")
+            .eq("partner:partners.neighborhood_id", neighborhoodId);
+          setActiveAnchors(anchorsData || []);
         }
 
         const { data: lotsData, error: lotsError } = await supabase
@@ -254,6 +262,30 @@ export default function BairroTransparenciaClient({ params }: { params: { slug: 
                 </p>
               </div>
             </div>
+          </div>
+        </section>
+      )}
+
+      {activeAnchors.length > 0 && (
+        <section className="mb-6">
+          <div className="card border-2 border-primary bg-primary/5">
+            <h2 className="stencil-text text-lg mb-4 flex items-center gap-2">
+              ⚓ ÂNCORAS DO COMUM (POLÍTICA v1.0)
+            </h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+              {activeAnchors.map(a => (
+                <Link key={a.partner_id} href={`/parceiros/${a.partner_id}`} className="card bg-white hover:border-primary transition-all p-3 flex justify-between items-center group">
+                  <div>
+                    <p className="font-black text-xs uppercase group-hover:text-primary">{a.partner?.name}</p>
+                    <p className="text-[10px] font-bold uppercase opacity-60">Status: {a.status} • {a.tier}</p>
+                  </div>
+                  <Award size={16} className="text-secondary" />
+                </Link>
+              ))}
+            </div>
+            <p className="text-[10px] font-bold uppercase mt-4 opacity-40 italic">
+              * Âncoras são parceiros com alta consistência e qualidade auditada.
+            </p>
           </div>
         </section>
       )}

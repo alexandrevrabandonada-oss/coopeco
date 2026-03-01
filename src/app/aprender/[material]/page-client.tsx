@@ -4,12 +4,14 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, BookOpen, Loader2 } from "lucide-react";
 import { createClient } from "@/lib/supabase";
+import { MultimediaPlayer } from "@/components/multimedia-player";
 
 interface TipRow {
   id: string;
   title: string;
   body: string;
   flag?: string | null;
+  media?: { media_id: string }[];
 }
 
 const materialLabelMap: Record<string, string> = {
@@ -35,14 +37,14 @@ export default function AprenderMaterialClientPage({ params }: { params: { mater
       const [{ data: materialTips }, { data: baseTips }] = await Promise.all([
         supabase
           .from("edu_tips")
-          .select("id, title, body, flag")
+          .select("id, title, body, flag, media:edu_tip_media(media_id)")
           .eq("active", true)
           .eq("material", material)
           .order("created_at", { ascending: false })
           .limit(12),
         supabase
           .from("edu_tips")
-          .select("id, title, body, flag")
+          .select("id, title, body, flag, media:edu_tip_media(media_id)")
           .eq("active", true)
           .is("material", null)
           .order("created_at", { ascending: false })
@@ -89,6 +91,9 @@ export default function AprenderMaterialClientPage({ params }: { params: { mater
                 {tip.flag && (
                   <p className="font-bold text-[10px] uppercase mt-1">Relacionada ao erro: {tip.flag}</p>
                 )}
+                {tip.media?.map((m) => (
+                  <MultimediaPlayer key={m.media_id} mediaId={m.media_id} title={tip.title} />
+                ))}
               </div>
             ))}
           </div>
@@ -103,6 +108,9 @@ export default function AprenderMaterialClientPage({ params }: { params: { mater
               <div key={tip.id} className="border-2 border-foreground bg-white p-3">
                 <p className="stencil-text text-sm">{tip.title}</p>
                 <p className="font-bold text-xs mt-1">{tip.body}</p>
+                {tip.media?.map((m) => (
+                  <MultimediaPlayer key={m.media_id} mediaId={m.media_id} title={tip.title} />
+                ))}
               </div>
             ))}
           </div>

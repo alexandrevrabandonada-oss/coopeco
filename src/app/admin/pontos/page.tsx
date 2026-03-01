@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase";
 import { useAuth } from "@/contexts/auth-context";
 import { EcoDropPoint, Profile } from "@/types/eco";
-import { Loader2, MapPin, ShieldOff } from "lucide-react";
+import { Download, Loader2, MapPin, ShieldOff } from "lucide-react";
 
 interface NeighborhoodOption {
   id: string;
@@ -277,7 +277,7 @@ export default function AdminPontosPage() {
                       <p className="font-black uppercase text-xs leading-none">{point.name}</p>
                       {inact && (
                         <span className={`text-[8px] font-black uppercase px-2 py-0.5 border-2 border-foreground ${inact.status === 'inactive' ? 'bg-accent text-white' :
-                            inact.status === 'stale' ? 'bg-yellow-400' : 'bg-primary'
+                          inact.status === 'stale' ? 'bg-yellow-400' : 'bg-primary'
                           }`}>
                           {inact.status}
                         </span>
@@ -304,6 +304,35 @@ export default function AdminPontosPage() {
                     <button className="cta-button small" style={{ background: "white" }} onClick={() => togglePoint(point)}>
                       {point.active ? "Desativar" : "Ativar"}
                     </button>
+                    <div className="flex flex-col gap-1">
+                      <a
+                        href={`/api/print/placa?kind=drop_point&id=${point.id}&format=a4`}
+                        target="_blank"
+                        className="p-2 border-2 border-foreground hover:bg-muted/10 transition-colors flex items-center justify-center bg-white"
+                        title="Baixar Placa A4"
+                      >
+                        <Download size={14} />
+                        <span className="ml-1 font-black text-[8px] uppercase">A4</span>
+                      </a>
+                      <a
+                        href={`/api/print/placa?kind=drop_point&id=${point.id}&format=sticker`}
+                        target="_blank"
+                        className="p-2 border-2 border-foreground hover:bg-muted/10 transition-colors flex items-center justify-center bg-white"
+                        title="Baixar Sticker"
+                      >
+                        <Download size={14} />
+                        <span className="ml-1 font-black text-[8px] uppercase">QR</span>
+                      </a>
+                      <a
+                        href={`/api/print/kit?kind=drop_point_checklist&drop_point_id=${point.id}&format=a4`}
+                        target="_blank"
+                        className="p-2 border-2 border-foreground hover:bg-muted/10 transition-colors flex items-center justify-center bg-white"
+                        title="Baixar Checklist"
+                      >
+                        <Download size={14} />
+                        <span className="ml-1 font-black text-[8px] uppercase">LIST</span>
+                      </a>
+                    </div>
                   </div>
                 </div>
               );

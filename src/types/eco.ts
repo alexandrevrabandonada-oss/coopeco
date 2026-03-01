@@ -10,6 +10,7 @@ export interface Profile {
     role: 'resident' | 'cooperado' | 'operator';
     display_name: string;
     neighborhood_id?: string;
+    cell_id?: string;
     neighborhood?: Neighborhood;
     created_at: string;
 }
@@ -336,5 +337,26 @@ export interface OnboardingState {
     chosen_drop_point_id?: string;
     chosen_window_id?: string;
     completed_at?: string;
+    updated_at: string;
+}
+
+export interface EcoPartnerPolicy {
+    id: string;
+    version: string;
+    title: string;
+    principles_md: string;
+    criteria_md: string;
+    enforcement_md: string;
+    created_at: string;
+}
+
+export interface EcoPartnerStatus {
+    partner_id: string;
+    status: 'candidate' | 'partner' | 'anchor' | 'suspended' | 'inactive';
+    tier?: 'bronze' | 'prata' | 'ouro' | null;
+    last_reviewed_at?: string | null;
+    reviewed_by?: string | null;
+    notes_public?: string | null;
+    notes_internal?: string | null;
     updated_at: string;
 }

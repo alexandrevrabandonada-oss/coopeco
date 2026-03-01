@@ -8,6 +8,7 @@ import { MediaPreview } from "@/components/media-preview"
 import { EduTip, MediaObject, Receipt, ReceiptTip } from "@/types/eco"
 import { getSignedUrlsForEntity } from "@/lib/storage-helpers"
 import { NeighborhoodErrorsWidget } from "@/components/neighborhood-errors-widget"
+import { MultimediaPlayer } from "@/components/multimedia-player"
 
 export default function ReciboDetalhes({ params }: { params: Promise<{ id: string }> }) {
     const { id } = use(params)
@@ -28,7 +29,10 @@ export default function ReciboDetalhes({ params }: { params: Promise<{ id: strin
           receipt_id,
           tip_id,
           created_at,
-          tip:edu_tips(id, slug, title, body, locale, active)
+          tip:edu_tips(
+            id, slug, title, body, locale, active,
+            media:edu_tip_media(media_id)
+          )
         ),
         request:pickup_requests(
           *,
@@ -193,6 +197,10 @@ export default function ReciboDetalhes({ params }: { params: Promise<{ id: strin
                                 <div className="mt-2 border-2 border-primary bg-primary/10 p-4">
                                     <p className="stencil-text text-xs">{tip.title}</p>
                                     <p className="font-bold text-xs mt-2">{tip.body}</p>
+
+                                    {(tip as any).media?.map((m: any) => (
+                                        <MultimediaPlayer key={m.media_id} mediaId={m.media_id} title={tip.title} />
+                                    ))}
                                 </div>
                             </div>
                         )}

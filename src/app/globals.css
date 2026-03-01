@@ -58,6 +58,8 @@ button {
   border: none;
   background: none;
   font-family: inherit;
+  min-height: 44px;
+  /* A56: Base touch target */
 }
 
 /* Responsive Wrapper */
@@ -161,6 +163,8 @@ button {
   box-shadow: 6px 6px 0px var(--foreground);
   transition: all 0.1s ease;
   cursor: pointer;
+  min-height: 44px;
+  /* A56: Base touch target */
 }
 
 .cta-button:active {
@@ -198,51 +202,137 @@ button {
     width: fit-content;
     left: 50%;
     transform: translateX(-50%);
-}
-
-/* VR Abandonada badge */
-.vr-badge {
-  position: fixed;
-  bottom: 1rem;
-  right: 1rem;
-  background: rgba(255, 255, 255, 0.8);
-  padding: 0.5rem 0.75rem;
-  border-radius: 0.5rem;
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  z-index: 1000;
-  font-family: inherit;
-}
-.vr-badge img {
-  height: 2rem;
-  width: auto;
-}
-.vr-badge span {
-  font-size: 0.75rem;
-  white-space: nowrap;
-}
-
-/* Stencil Text Effects */
-.stencil-text {
-  text-transform: uppercase;
-  font-weight: 900;
-  letter-spacing: 0.05em;
-}
-
-/* Animations */
-@keyframes slideUp {
-  from {
-    opacity: 0;
-    transform: translateY(20px);
   }
 
-  to {
-    opacity: 1;
-    transform: translateY(0);
+  /* VR Abandonada badge */
+  .vr-badge {
+    position: fixed;
+    bottom: 1rem;
+    right: 1rem;
+    background: rgba(255, 255, 255, 0.8);
+    padding: 0.5rem 0.75rem;
+    border-radius: 0.5rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    z-index: 1000;
+    font-family: inherit;
+  }
+
+  .vr-badge img {
+    height: 2rem;
+    width: auto;
+  }
+
+  .vr-badge span {
+    font-size: 0.75rem;
+    white-space: nowrap;
+  }
+
+  /* Stencil Text Effects */
+  .stencil-text {
+    text-transform: uppercase;
+    font-weight: 900;
+    letter-spacing: 0.05em;
+  }
+
+  /* Animations */
+  @keyframes slideUp {
+    from {
+      opacity: 0;
+      transform: translateY(20px);
+    }
+
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  .animate-slide-up {
+    animation: slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  }
+
+  /* A40 — Accessibility & Street Mode */
+
+  /* Text Scale */
+  :root[data-ui-text-scale="115"] {
+    font-size: 115%;
+  }
+
+  :root[data-ui-text-scale="130"] {
+    font-size: 130%;
+  }
+
+  /* High Contrast mode */
+  :root[data-ui-contrast="high"] {
+    --background: #ffffff;
+    --foreground: #000000;
+    --primary: #fbbf24;
+    --secondary: #000000;
+    --accent: #ff0000;
+    --muted: #000000;
+    --border: #000000;
+    --card: #ffffff;
+    --shadow: 8px 8px 0px rgba(0, 0, 0, 1);
+  }
+
+  :root[data-ui-contrast="high"] * {
+    border-width: 2.5px !important;
+  }
+
+  /* Reduce Motion */
+  :root[data-ui-reduce-motion="true"] *,
+  :root[data-ui-reduce-motion="true"] ::before,
+  :root[data-ui-reduce-motion="true"] ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  /* Street Mode Overrides */
+  .street-mode {
+    --shadow: 0px 0px 0px transparent !important;
+    /* No shadows in high-glare/sun */
+  }
+
+  /* Increase tap targets for Street Mode */
+  .street-mode .cta-button,
+  .street-mode button:not(.tiny),
+  .street-mode .field,
+  .street-mode .nav-item {
+    min-height: 48px;
+    /* Elevated minimum for challenging conditions */
+  }
+
+  .street-mode .card {
+    padding: 2rem;
+  }
+
+  /* Focus visibility (High Contrast) */
+  :root[data-ui-contrast="high"] *:focus-visible {
+    outline: 4px solid var(--primary) !important;
+    outline-offset: 2px;
+  }
+
+  /* Skip Link */
+  .skip-link {
+    position: absolute;
+    top: -100px;
+    left: 0;
+    background: var(--primary);
+    color: var(--foreground);
+    padding: 12px 24px;
+    z-index: 10000;
+    font-weight: 900;
+    text-transform: uppercase;
+    border: 2px solid var(--foreground);
+  }
+
+  .skip-link:focus {
+    top: 0;
   }
 }
 
-.animate-slide-up {
-  animation: slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-}
+/* A56 Fix: Close @media query */

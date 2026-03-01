@@ -15,17 +15,51 @@ export default function OnboardingStart() {
     const handleStart = async () => {
         if (!user) return;
         setLoading(true);
-        // Initialize or update onboarding state
-        const { error } = await supabase.from("onboarding_state").upsert({
-            user_id: user.id,
-            step: 'neighborhood'
-        });
 
-        if (error) {
-            console.error(error);
-            setLoading(false);
+        let context: any = null;
+        try {
+            const stored = localStorage.getItem("eco_invite_context");
+            if (stored) context = JSON.parse(stored);
+        } catch (e) {
+            console.error("Failed to parse invite context", e);
+        }
+
+        // If we have context, we can pre-apply neighborhood or even drop point
+        if (context?.neighborhoodId) {
+            await supabase.from("profiles").update({
+                neighborhood_id: context.neighborhoodId
+            }).eq("user_id", user.id);
+
+            // Log signup_completed event
+            const { data: invite } = await supabase.from("invite_codes").select("id").eq("code", context.code).maybeSingle();
+            if (invite) {
+                await supabase.from("invite_events").insert({
+                    code_id: invite.id,
+                    event_kind: 'signup_completed'
+                });
+            }
+
+            await supabase.from("onboarding_state").upsert({
+                user_id: user.id,
+                step: context.dropPointId ? 'first_action' : 'mode',
+                chosen_mode: context.dropPointId ? 'drop_point' : null,
+                chosen_drop_point_id: context.dropPointId || null
+            });
+
+            router.push(context.dropPointId ? "/começar/acao" : "/começar/modo");
         } else {
-            router.push("/começar/bairro");
+            // Standard flow
+            const { error } = await supabase.from("onboarding_state").upsert({
+                user_id: user.id,
+                step: 'neighborhood'
+            });
+
+            if (error) {
+                console.error(error);
+                setLoading(false);
+            } else {
+                router.push("/começar/bairro");
+            }
         }
     };
 

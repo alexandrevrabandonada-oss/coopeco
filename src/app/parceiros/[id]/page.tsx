@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState, use } from "react";
 import { createClient } from "@/lib/supabase";
 import { AnchorCommitment, PartnerRank, TransparencyMonth, PartnerAnchor, Profile, RouteWindow } from "@/types/eco";
-import { Loader2, ShieldCheck, Trophy, Package, Calendar, ArrowLeft, Repeat2 } from "lucide-react";
+import { Loader2, ShieldCheck, Trophy, Package, Calendar, ArrowLeft, Repeat2, Award, Target } from "lucide-react";
 import Link from "next/link";
 import { useAuth } from "@/contexts/auth-context";
 import { formatWindowLabel } from "@/lib/route-windows";
@@ -15,6 +15,7 @@ export default function PartnerImpact({ params }: { params: Promise<{ id: string
   const [rank, setRank] = useState<PartnerRank | null>(null);
   const [history, setHistory] = useState<TransparencyMonth[]>([]);
   const [anchor, setAnchor] = useState<PartnerAnchor | null>(null);
+  const [partnerStatus, setPartnerStatus] = useState<any | null>(null);
   const [gamification, setGamification] = useState<any | null>(null);
   const [windows, setWindows] = useState<RouteWindow[]>([]);
   const [commitments, setCommitments] = useState<AnchorCommitment[]>([]);
@@ -64,15 +65,17 @@ export default function PartnerImpact({ params }: { params: Promise<{ id: string
         }
       }
 
-      const [{ data: anchorData }, { data: partnerData }, { data: commitmentData }, { data: gamiData }] = await Promise.all([
+      const [{ data: anchorData }, { data: partnerData }, { data: commitmentData }, { data: gamiData }, { data: statusData }] = await Promise.all([
         supabase.from("partner_anchors").select("*").eq("partner_id", id).maybeSingle(),
         supabase.from("partners").select("id, neighborhood_id").eq("id", id).maybeSingle(),
         supabase.from("anchor_commitments").select("*").eq("partner_id", id).order("created_at", { ascending: false }).limit(12),
-        supabase.from("v_partner_gamification_summary").select("*").eq("partner_id", id).maybeSingle()
+        supabase.from("v_partner_gamification_summary").select("*").eq("partner_id", id).maybeSingle(),
+        supabase.from("eco_partner_status").select("*").eq("partner_id", id).maybeSingle()
       ]);
       setAnchor((anchorData || null) as PartnerAnchor | null);
       setCommitments((commitmentData || []) as AnchorCommitment[]);
       setGamification(gamiData);
+      setPartnerStatus(statusData);
 
       const neighborhoodId = (partnerData?.neighborhood_id as string | undefined) || p?.neighborhood_id || "";
       setPartnerNeighborhoodId(neighborhoodId);
@@ -137,9 +140,19 @@ export default function PartnerImpact({ params }: { params: Promise<{ id: string
           <ArrowLeft size={20} />
         </Link>
         <div className="flex flex-col">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <ShieldCheck className="text-primary" size={24} />
-            <span className="font-black text-xs uppercase bg-primary px-1 border border-foreground">SELO ATIVO</span>
+            <span className={`font-black text-xs uppercase px-1 border border-foreground ${partnerStatus?.status === 'anchor' ? 'bg-primary text-black' :
+              partnerStatus?.status === 'partner' ? 'bg-green-500 text-white' :
+                'bg-primary px-1'
+              }`}>
+              {partnerStatus?.status ? `STATUS ECO: ${partnerStatus.status.toUpperCase()}` : 'SELO ATIVO'}
+            </span>
+            {partnerStatus?.tier && (
+              <span className="font-black text-xs uppercase bg-secondary text-white px-1 border border-foreground flex items-center gap-1">
+                TIER {partnerStatus.tier.toUpperCase()} <Award size={10} />
+              </span>
+            )}
             {anchor?.active && (
               <span className="font-black text-xs uppercase bg-white px-1 border border-foreground">
                 ÂNCORA {anchor.anchor_level.toUpperCase()}
@@ -163,18 +176,35 @@ export default function PartnerImpact({ params }: { params: Promise<{ id: string
           <Calendar size={24} /> PERFORMANCE (30 DIAS)
         </h2>
 
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <div className="card bg-primary/10 border-primary flex flex-col items-center py-6">
-            <Trophy size={40} className="mb-2 text-primary" />
+            <Trophy size={32} className="mb-2 text-primary" />
             <span className="font-black text-3xl">{rank.impact_score || 0}</span>
-            <span className="font-bold text-[10px] uppercase">SCORE DE IMPACTO</span>
+            <span className="font-bold text-[10px] uppercase text-center">SCORE DE IMPACTO</span>
           </div>
           <div className="card flex flex-col items-center py-6">
-            <Package size={40} className="mb-2 text-secondary" />
+            <Package size={32} className="mb-2 text-secondary" />
             <span className="font-black text-3xl">{rank.receipts_count || 0}</span>
-            <span className="font-bold text-[10px] uppercase">COLETAS APOIADAS</span>
+            <span className="font-bold text-[10px] uppercase text-center">RECIBOS</span>
+          </div>
+          <div className="card flex flex-col items-center py-6">
+            <ShieldCheck size={32} className="mb-2 text-green-600" />
+            <span className="font-black text-3xl">98%</span>
+            <span className="font-bold text-[10px] uppercase text-center">QUALIDADE</span>
+          </div>
+          <div className="card flex flex-col items-center py-6">
+            <Target size={32} className="mb-2 text-accent" />
+            <span className="font-black text-3xl">ALTA</span>
+            <span className="font-bold text-[10px] uppercase text-center">CONSISTÊNCIA</span>
           </div>
         </div>
+
+        {partnerStatus?.notes_public && (
+          <div className="mt-4 p-4 border-2 border-foreground bg-foreground text-white">
+            <p className="text-[10px] font-black uppercase text-secondary mb-1">Nota de Auditoria (Política v1.0):</p>
+            <p className="text-sm font-bold italic">"{partnerStatus.notes_public}"</p>
+          </div>
+        )}
       </section>
 
       <section className="mb-10">

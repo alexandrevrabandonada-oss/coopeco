@@ -41,6 +41,16 @@ type WindowLoad = {
     status_bucket: 'ok' | 'warning' | 'critical';
 };
 
+type ZoneLoad = {
+    zone_id: string;
+    neighborhood_id: string;
+    requests_count: number;
+    receipts_count: number;
+    ok_rate: number;
+    avg_lat: number;
+    avg_lng: number;
+};
+
 type WindowQuality = {
     window_id: string;
     receipts_count: number;
@@ -71,6 +81,8 @@ export default function AdminInteligenciaPage() {
     const [dropPointLoads, setDropPointLoads] = useState<DropPointLoad[]>([]);
     const [inactivePoints, setInactivePoints] = useState<any[]>([]);
     const [opsAlerts, setOpsAlerts] = useState<any[]>([]);
+    const [zoneLoads, setZoneLoads] = useState<ZoneLoad[]>([]);
+    const [activeTab, setActiveTab] = useState<'general' | 'zones'>('general');
     const [isLoading, setIsLoading] = useState(true);
 
     // Action Modal State
@@ -139,6 +151,14 @@ export default function AdminInteligenciaPage() {
                     setOpsAlerts(alertsRes.data);
                 }
 
+                // Fetch Heatmap Zones (A15.2)
+                const { data: zonesData } = await supabase
+                    .from('v_zone_load_14d')
+                    .select('*')
+                    .eq('neighborhood_id', selectedNeighborhoodId)
+                    .order('requests_count', { ascending: false });
+                setZoneLoads(zonesData || []);
+
                 // Fetch Inactive Points (A15.4)
                 const { data: inactiveData } = await supabase
                     .from('v_drop_point_inactivity_14d')
@@ -156,6 +176,24 @@ export default function AdminInteligenciaPage() {
 
         loadIntel();
     }, [selectedNeighborhoodId, supabase]);
+
+    const openIncident = async (kind: string, neighborhoodId?: string) => {
+        setIsSubmitting(true);
+        try {
+            const res = await fetch("/api/admin/incidents", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ kind, neighborhood_id: neighborhoodId || selectedNeighborhoodId })
+            });
+            if (!res.ok) throw new Error("Falha ao abrir incidente");
+            alert("Incidente aberto no Runbook.");
+            window.location.href = "/admin/runbook";
+        } catch (err: any) {
+            alert(err.message);
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
 
     const handleAction = async () => {
         if (!modalConfig.type) return;
@@ -259,9 +297,67 @@ export default function AdminInteligenciaPage() {
                     </div>
                 </div>
 
+                <div className="flex gap-2 mb-8 border-b-2 border-foreground pb-4">
+                    <button
+                        onClick={() => setActiveTab('general')}
+                        className={`stencil-text text-sm px-4 py-2 border-2 border-foreground ${activeTab === 'general' ? 'bg-primary' : 'bg-white'}`}
+                    >
+                        PULSO GERAL
+                    </button>
+                    <button
+                        onClick={() => setActiveTab('zones')}
+                        className={`stencil-text text-sm px-4 py-2 border-2 border-foreground ${activeTab === 'zones' ? 'bg-primary' : 'bg-white'}`}
+                    >
+                        MAPA DE ZONAS (COARSE)
+                    </button>
+                </div>
+
                 {isLoading ? (
                     <div className="flex items-center justify-center py-24">
                         <Loader2 className="animate-spin text-primary" size={48} />
+                    </div>
+                ) : activeTab === 'zones' ? (
+                    <div className="animate-slide-up">
+                        <section className="card border-2 border-foreground bg-white p-6 shadow-[8px_8px_0_0_rgba(0,0,0,1)] mb-8">
+                            <h2 className="stencil-text text-xl mb-4 flex items-center gap-2">
+                                <BarChart3 size={24} className="text-primary" /> ZONAS DE CALOR (K-ANONYMITY ≥ 5)
+                            </h2>
+                            <p className="font-bold uppercase text-[10px] opacity-60 mb-6 leading-tight">
+                                ESTES DADOS SÃO AGREGADOS POR CÉLULAS DE ~500M PARA PROTEGER A PRIVACIDADE DOS MORADORES.
+                                NENHUM ENDEREÇO INDIVIDUAL É REEXPOSTO.
+                            </p>
+
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                {zoneLoads.map((zone, i) => (
+                                    <div key={i} className="card p-4 border-2 border-foreground hover:translate-x-1 hover:translate-y-1 transition-transform cursor-default">
+                                        <div className="flex justify-between items-center mb-3">
+                                            <span className="font-black text-[10px] uppercase bg-muted px-2 py-0.5 border border-foreground">CÉLULA {zone.zone_id.replace('Z:', '').replaceAll(':', ' / ')}</span>
+                                            <span className={`font-black text-[10px] uppercase px-2 py-0.5 border border-foreground ${zone.ok_rate > 0.8 ? 'bg-primary' : 'bg-accent text-white'}`}>
+                                                {Math.round(zone.ok_rate * 100)}% OK
+                                            </span>
+                                        </div>
+                                        <div className="flex flex-col gap-1">
+                                            <p className="text-2xl font-black">{zone.requests_count} <small className="text-[10px] opacity-50 uppercase">PEDIDOS / 14D</small></p>
+                                            <p className="font-bold text-[10px] uppercase opacity-70 italic">Localização aproximada: {zone.avg_lat.toFixed(3)}, {zone.avg_lng.toFixed(3)}</p>
+                                        </div>
+                                        <div className="mt-4 pt-4 border-t border-muted">
+                                            <div className="w-full h-4 bg-muted border border-foreground overflow-hidden">
+                                                <div
+                                                    className="h-full bg-primary"
+                                                    style={{ width: `${Math.min(100, (zone.requests_count / 15) * 100)}%` }}
+                                                />
+                                            </div>
+                                            <p className="text-[8px] font-black uppercase mt-1 opacity-60">CARGA RELATIVA NA REGIÃO</p>
+                                        </div>
+                                    </div>
+                                ))}
+                                {zoneLoads.length === 0 && (
+                                    <div className="col-span-full py-12 text-center card bg-muted/20 border-dashed">
+                                        <p className="font-black opacity-50 uppercase">SEM ZONAS DE CALOR COM DENSIDADE SUFICIENTE (K-ANONYMITY ≥ 5).</p>
+                                    </div>
+                                )}
+                            </div>
+                        </section>
                     </div>
                 ) : (
                     <div className="grid grid-cols-1 gap-8">
@@ -289,6 +385,12 @@ export default function AdminInteligenciaPage() {
                                                 <p className="text-xs font-bold uppercase opacity-70 mb-3">{alert.body}</p>
 
                                                 <div className="flex gap-2">
+                                                    <button
+                                                        onClick={() => openIncident(alert.severity === 'critical' ? 'capacity_critical' : 'capacity_warning')}
+                                                        className="text-[9px] font-black uppercase bg-foreground text-white px-2 py-1 border-2 border-foreground hover:translate-x-0.5 hover:translate-y-0.5"
+                                                    >
+                                                        Abrir Incidente
+                                                    </button>
                                                     {alert.kind.includes('capacity') && (
                                                         <>
                                                             <button

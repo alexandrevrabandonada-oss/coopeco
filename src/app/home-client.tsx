@@ -9,6 +9,7 @@ import { Recycle, ArrowRight, TrendingUp, ShieldCheck, MapPin, FileText } from "
 export default function HomeClient() {
     const [pilot, setPilot] = useState<any | null>(null);
     const [onboarding, setOnboarding] = useState<any | null>(null);
+    const [rampStatus, setRampStatus] = useState<any | null>(null);
     const [loading, setLoading] = useState(true);
     const supabase = useMemo(() => createClient(), []);
 
@@ -40,6 +41,16 @@ export default function HomeClient() {
             }
 
             setOnboarding(onboardingRes.data);
+
+            if (program?.neighborhoods?.[0]?.neighborhood?.slug) {
+                const { data: ramp } = await supabase
+                    .from("v_ramp_public_status")
+                    .select("*")
+                    .eq("slug", program.neighborhoods[0].neighborhood.slug)
+                    .maybeSingle();
+                setRampStatus(ramp);
+            }
+
             setLoading(false);
         }
         load();
@@ -100,6 +111,18 @@ export default function HomeClient() {
                                 <div className="prose prose-sm font-bold uppercase text-xs text-muted-foreground whitespace-pre-wrap">
                                     {pilot.notes_public || "Ritual diário de coletas e transparência total para o bairro."}
                                 </div>
+                                {rampStatus && (
+                                    <div className="mt-4 p-3 border-2 border-foreground bg-white">
+                                        <p className="font-black text-[10px] uppercase mb-1">Status de Abertura:</p>
+                                        <div className="flex items-center gap-2 mb-1">
+                                            <span className={`w-3 h-3 rounded-full ${rampStatus.is_open ? 'bg-green-500' : 'bg-accent'}`}></span>
+                                            <span className="font-black text-xs uppercase">{rampStatus.open_mode.replace('_', ' ')}</span>
+                                        </div>
+                                        <p className="font-bold text-[10px] uppercase opacity-60 leading-tight italic">
+                                            {rampStatus.reason || "Operação estável"}
+                                        </p>
+                                    </div>
+                                )}
                             </div>
                             <div className="flex flex-col gap-3">
                                 <h3 className="font-black text-sm uppercase mb-3">RECIBO COMO LEI</h3>

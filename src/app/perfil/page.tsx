@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react"
 import { useAuth } from "@/contexts/auth-context"
 import { LoginForm } from "@/components/login-form"
 import { ProfileOnboarding } from "@/components/profile-onboarding"
-import { Loader2, LogOut, User as UserIcon, MapPin, Shield, Recycle, Rocket } from "lucide-react"
+import { Loader2, LogOut, User as UserIcon, MapPin, Shield, Recycle, Rocket, MessageSquare } from "lucide-react"
 import Link from "next/link"
 import { createClient } from "@/lib/supabase"
 import { PickupAddressProfile, ProfileGamificationSummary } from "@/types/eco"
@@ -332,6 +332,10 @@ export default function Perfil() {
                     <Link href="/notificacoes" className="cta-button w-full justify-between" style={{ background: 'white' }}>
                         MINHAS NOTIFICAÇÕES
                         <Shield size={20} />
+                    </Link>
+                    <Link href="/feedback" className="cta-button w-full justify-between bg-white text-secondary border-secondary">
+                        ENVIAR FEEDBACK (30S)
+                        <MessageSquare size={20} />
                     </Link>
                     {['cooperado', 'operator'].includes(p.role) && (
                         <Link href="/cooperado" className="cta-button w-full justify-between" style={{ background: 'var(--accent)', color: 'white' }}>

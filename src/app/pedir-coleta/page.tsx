@@ -200,14 +200,42 @@ export default function PedirColeta() {
             console.error(err)
             const maybeError = err as { message?: string } | null
             const errorText = maybeError?.message || ""
+
+            let blockCode = "";
+
             if (errorText.includes("rate_limit")) {
-                setErrorMessage("Você atingiu o limite diário de pedidos. Tente amanhã ou junte mais itens em um único pedido.")
+                setErrorMessage("Parece que você já pediu uma coleta hoje. Podemos tentar novamente amanhã? Se precisar descartar muito, visite o Ponto ECO mais próximo.")
             } else if (errorText.includes("item_limit")) {
-                setErrorMessage(`Máximo de ${MAX_ITEMS_PER_REQUEST} itens por pedido.`)
+                setErrorMessage(`Para manter o trabalho justo, o limite é de ${MAX_ITEMS_PER_REQUEST} itens por pedido.`)
             } else if (errorText.includes("item_qty_limit")) {
-                setErrorMessage(`A quantidade por item deve ficar entre 1 e ${MAX_QTY_PER_ITEM}.`)
+                setErrorMessage(`Para segurança no transporte, a quantidade por item deve ser entre 1 e ${MAX_QTY_PER_ITEM}.`)
+            } else if (errorText.includes("Launch Control Block: user_no_grant")) {
+                blockCode = "ux_blocked_launch"
+                setErrorMessage("Nossa operação não encontrou seu convite ativo. Fique de olho, em breve abriremos mais vagas no seu bairro!")
+            } else if (errorText.includes("Launch Control Block: launch_closed")) {
+                blockCode = "ux_blocked_launch"
+                setErrorMessage("Estamos organizando a operação no bairro hoje e pausamos novas coletas temporariamente. Que tal tentar amanhã?")
+            } else if (errorText.includes("Launch Control Block: health_blocked")) {
+                blockCode = "ux_blocked_health"
+                setErrorMessage("Estamos realinhando rotas para garantir trabalho digno aos motoristas e coletores hoje. Por favor, tente amanhã ou leve ao Ponto ECO.")
+            } else if (errorText.includes("Launch Control Block: capacity_blocked")) {
+                blockCode = "ux_blocked_capacity"
+                setErrorMessage("Esta janela já atingiu sua capacidade máxima (Trabalho Digno). Por favor, selecione a próxima janela ou passe em um Ponto ECO.")
+            } else if (errorText.includes("Launch Control Block: feedback_blocked")) {
+                blockCode = "ux_blocked_feedback"
+                setErrorMessage("Estamos resolvendo pendências locais importantes (Aviso A36). Tente novamente mais tarde.")
             } else {
-                setErrorMessage("Erro ao criar pedido. Verifique os dados e tente novamente.")
+                setErrorMessage("Algum erro técnico impediu seu pedido. Nossos engenheiros já foram notificados.")
+            }
+
+            if (blockCode && p.neighborhood_id) {
+                // A56 Telemetry: Log block event without user_id tracking
+                await supabase.from("eco_obs_events").insert({
+                    neighborhood_id: p.neighborhood_id,
+                    kind: blockCode,
+                    severity: 'info',
+                    details: { reason: errorText }
+                }); // Fire and forget (errors suppressed by design)
             }
         } finally {
             setIsSubmitting(false)

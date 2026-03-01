@@ -3,7 +3,7 @@
 import { useEffect, useState, use } from "react"
 import { createClient } from "@/lib/supabase"
 import { NeighborhoodRank, TransparencyMonth } from "@/types/eco"
-import { Loader2, TrendingUp, Trophy, Package, Users, MessageSquare, ArrowLeft } from "lucide-react"
+import { Loader2, TrendingUp, Trophy, Package, Users, MessageSquare, ArrowLeft, Target } from "lucide-react"
 import Link from "next/link"
 
 export default function NeighborhoodImpact({ params }: { params: Promise<{ slug: string }> }) {
@@ -130,13 +130,16 @@ export default function NeighborhoodImpact({ params }: { params: Promise<{ slug:
                         VER TRANSPARÊNCIA SEMANAL
                     </Link>
                 )}
+                <Link href={`/bairros/${slug}/missoes`} className="cta-button w-full justify-between py-6 px-6" style={{ background: "white" }}>
+                    MISSÕES DO COMUM
+                    <Target size={24} />
+                </Link>
                 {isGovEnabled && (
                     <Link href={`/bairros/${slug}/decisoes`} className="cta-button w-full justify-center py-6" style={{ background: "#0f766e", color: "white" }}>
                         VER RECIBOS DE DECISÃO
                     </Link>
                 )}
             </div>
-
             <style jsx>{`
                 .grid { display: grid; }
                 .grid-cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }

@@ -3,10 +3,13 @@
 import { useEffect, useState, useCallback, useMemo } from "react";
 import { createClient } from "@/lib/supabase";
 import { useAuth } from "@/contexts/auth-context";
-import { Loader2, ShieldOff, Package, MapPin, CheckCircle2, Eye, Truck, User, Filter } from "lucide-react";
+import { Loader2, ShieldOff, Package, MapPin, CheckCircle2, Eye, Truck, User, Filter, Radio } from "lucide-react";
 import Link from "next/link";
 import { Profile, PickupRequest, RouteWindow } from "@/types/eco";
 import { formatWindowLabel } from "@/lib/route-windows";
+import { useSync } from "@/lib/offline/sync-provider";
+import { ecoCache } from "@/lib/offline/db";
+import { OfflineBanner } from "@/components/offline-banner";
 
 type FilterMode = "today" | "next_window" | "bairro";
 type CooperadoTab = "requests" | "points" | "doorstep";
@@ -22,6 +25,8 @@ export default function CooperadoDashboard() {
   const [isLoading, setIsLoading] = useState(true);
   const [filterMode, setFilterMode] = useState<FilterMode>("next_window");
   const [activeTab, setActiveTab] = useState<CooperadoTab>("requests");
+  const [roadMode, setRoadMode] = useState(false);
+  const sync = useSync();
   const supabase = useMemo(() => createClient(), []);
 
   const p = profile as Profile;
@@ -29,6 +34,17 @@ export default function CooperadoDashboard() {
   const loadData = useCallback(async () => {
     if (!p?.neighborhood_id || !user?.id) return;
     setIsLoading(true);
+
+    const isOffline = sync.status === 'offline';
+
+    if (roadMode && isOffline) {
+      const cachedOpen = await ecoCache.get<PickupRequestWithWindow[]>(`open_${p.neighborhood_id}`);
+      const cachedMine = await ecoCache.get<PickupRequestWithWindow[]>(`mine_${user.id}`);
+      if (cachedOpen) setOpenRequests(cachedOpen);
+      if (cachedMine) setMyAssignments(cachedMine);
+      setIsLoading(false);
+      return;
+    }
 
     const [{ data: open, error: openError }, { data: assignmentRows, error: assignmentsError }] = await Promise.all([
       supabase
@@ -68,20 +84,32 @@ export default function CooperadoDashboard() {
           .in("status", ["accepted", "en_route"])
           .in("id", requestIds)
           .order("scheduled_for", { ascending: true, nullsFirst: false });
-        if (mine) setMyAssignments(mine as PickupRequestWithWindow[]);
+        if (mine) {
+          setMyAssignments(mine as PickupRequestWithWindow[]);
+          if (roadMode) ecoCache.set(`mine_${user.id}`, mine);
+        }
       } else {
         setMyAssignments([]);
+        if (roadMode) ecoCache.set(`mine_${user.id}`, []);
       }
     }
 
+    if (!openError && open && roadMode) {
+      ecoCache.set(`open_${p.neighborhood_id}`, open);
+    }
+
     setIsLoading(false);
-  }, [p?.neighborhood_id, user?.id, supabase]);
+  }, [p?.neighborhood_id, user?.id, supabase, roadMode, sync.status]);
 
   useEffect(() => {
     loadData();
   }, [loadData]);
 
   const acceptRequest = async (id: string) => {
+    if (!navigator.onLine) {
+      alert("Para aceitar novos pedidos você precisa estar online (evita conflitos).");
+      return;
+    }
     try {
       const { error: assignError } = await supabase
         .from("pickup_assignments")
@@ -183,6 +211,33 @@ export default function CooperadoDashboard() {
         </div>
       </div>
 
+      <div className="flex flex-col gap-4 mb-8">
+        <div className="flex items-center justify-between card bg-white border-2 border-foreground">
+          <div className="flex items-center gap-3">
+            <Radio size={20} className={roadMode ? "text-primary animate-pulse" : "text-muted-foreground"} />
+            <div>
+              <p className="font-black text-xs uppercase">Modo Rua (Offline)</p>
+              <p className="text-[10px] font-bold text-muted-foreground uppercase leading-tight">
+                {roadMode ? "Cache ativo para áreas sem sinal." : "Ative para trabalhar sem internet."}
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={() => {
+              const next = !roadMode;
+              setRoadMode(next);
+              if (next) loadData();
+            }}
+            className={`stencil-text text-sm p-1 border-2 border-foreground ${roadMode ? "bg-primary" : "bg-muted"}`}
+            style={{ minWidth: '80px', textAlign: 'center' }}
+          >
+            {roadMode ? "ON" : "OFF"}
+          </button>
+        </div>
+
+        <OfflineBanner />
+      </div>
+
       <section className="mb-10">
         <h2 className="stencil-text text-xl mb-4 flex items-center gap-2">
           <Truck size={24} /> MINHAS ENTREGAS ATIVAS
@@ -248,74 +303,74 @@ export default function CooperadoDashboard() {
         </div>
         {activeTab === "requests" ? (
           <>
-        <div className="card mb-4 flex flex-wrap gap-2 items-center">
-          <Filter size={16} />
-          <button className="cta-button small" style={{ background: filterMode === "today" ? "var(--primary)" : "white" }} onClick={() => setFilterMode("today")}>
-            Hoje
-          </button>
-          <button className="cta-button small" style={{ background: filterMode === "next_window" ? "var(--primary)" : "white" }} onClick={() => setFilterMode("next_window")}>
-            Próxima janela
-          </button>
-          <button className="cta-button small" style={{ background: filterMode === "bairro" ? "var(--primary)" : "white" }} onClick={() => setFilterMode("bairro")}>
-            Este bairro
-          </button>
-        </div>
-        <div className="flex flex-col gap-4">
-          {filteredOpenRequests.map((req) => (
-            <div key={req.id} className="card">
-              <div className="flex justify-between items-start mb-4">
-                <div>
-                  <h3 className="font-black text-sm uppercase">PEDIDO DE {req.resident?.display_name}</h3>
-                  <p className="text-[10px] text-muted">{new Date(req.created_at).toLocaleTimeString()}</p>
-                  <p className="text-[10px] font-bold uppercase">
-                    {req.scheduled_for
-                      ? `Agendado: ${new Date(req.scheduled_for).toLocaleString("pt-BR")}`
-                      : "Sem agendamento (on-demand)"}
-                  </p>
-                  <p className="text-[10px] font-bold uppercase">
-                    Janela: {req.route_window ? formatWindowLabel(req.route_window) : "ON-DEMAND"}
-                  </p>
-                  <p className="text-[10px] font-bold uppercase">
-                    Modo: {req.fulfillment_mode === "drop_point" ? "Entrega em Ponto" : "Retirada em casa"}
-                  </p>
-                </div>
-                <div className="flex flex-col gap-1 items-end">
-                  <span className="bg-muted text-foreground p-1 text-[10px] font-black uppercase border border-foreground">
-                    {req.items?.length || 0} ITENS
-                  </span>
-                  {req.is_recurring && (
-                    <span className="bg-primary text-foreground p-1 text-[10px] font-black uppercase border border-foreground">
-                      RECORRENTE
-                    </span>
-                  )}
-                </div>
-              </div>
-
-              <div className="mb-4">
-                <ul className="flex flex-wrap gap-2 list-none p-0">
-                  {req.items?.slice(0, 3).map((item, i: number) => (
-                    <li key={i} className="bg-white border border-foreground/20 px-2 py-1 text-[10px] font-bold uppercase">
-                      {item.material} ({item.qty})
-                    </li>
-                  ))}
-                  {(req.items?.length ?? 0) > 3 && <li className="text-[10px] font-bold">+ {(req.items?.length ?? 0) - 3} MAIS</li>}
-                </ul>
-              </div>
-
-              <button
-                onClick={() => acceptRequest(req.id)}
-                className="cta-button w-full justify-center py-4"
-              >
-                ACEITAR COLETA <CheckCircle2 size={20} />
+            <div className="card mb-4 flex flex-wrap gap-2 items-center">
+              <Filter size={16} />
+              <button className="cta-button small" style={{ background: filterMode === "today" ? "var(--primary)" : "white" }} onClick={() => setFilterMode("today")}>
+                Hoje
+              </button>
+              <button className="cta-button small" style={{ background: filterMode === "next_window" ? "var(--primary)" : "white" }} onClick={() => setFilterMode("next_window")}>
+                Próxima janela
+              </button>
+              <button className="cta-button small" style={{ background: filterMode === "bairro" ? "var(--primary)" : "white" }} onClick={() => setFilterMode("bairro")}>
+                Este bairro
               </button>
             </div>
-          ))}
-          {filteredOpenRequests.length === 0 && (
-            <div className="card text-center py-8">
-              <p className="font-bold text-muted uppercase">NÃO HÁ PEDIDOS ABERTOS PARA ESTE FILTRO.</p>
+            <div className="flex flex-col gap-4">
+              {filteredOpenRequests.map((req) => (
+                <div key={req.id} className="card">
+                  <div className="flex justify-between items-start mb-4">
+                    <div>
+                      <h3 className="font-black text-sm uppercase">PEDIDO DE {req.resident?.display_name}</h3>
+                      <p className="text-[10px] text-muted">{new Date(req.created_at).toLocaleTimeString()}</p>
+                      <p className="text-[10px] font-bold uppercase">
+                        {req.scheduled_for
+                          ? `Agendado: ${new Date(req.scheduled_for).toLocaleString("pt-BR")}`
+                          : "Sem agendamento (on-demand)"}
+                      </p>
+                      <p className="text-[10px] font-bold uppercase">
+                        Janela: {req.route_window ? formatWindowLabel(req.route_window) : "ON-DEMAND"}
+                      </p>
+                      <p className="text-[10px] font-bold uppercase">
+                        Modo: {req.fulfillment_mode === "drop_point" ? "Entrega em Ponto" : "Retirada em casa"}
+                      </p>
+                    </div>
+                    <div className="flex flex-col gap-1 items-end">
+                      <span className="bg-muted text-foreground p-1 text-[10px] font-black uppercase border border-foreground">
+                        {req.items?.length || 0} ITENS
+                      </span>
+                      {req.is_recurring && (
+                        <span className="bg-primary text-foreground p-1 text-[10px] font-black uppercase border border-foreground">
+                          RECORRENTE
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="mb-4">
+                    <ul className="flex flex-wrap gap-2 list-none p-0">
+                      {req.items?.slice(0, 3).map((item, i: number) => (
+                        <li key={i} className="bg-white border border-foreground/20 px-2 py-1 text-[10px] font-bold uppercase">
+                          {item.material} ({item.qty})
+                        </li>
+                      ))}
+                      {(req.items?.length ?? 0) > 3 && <li className="text-[10px] font-bold">+ {(req.items?.length ?? 0) - 3} MAIS</li>}
+                    </ul>
+                  </div>
+
+                  <button
+                    onClick={() => acceptRequest(req.id)}
+                    className="cta-button w-full justify-center py-4"
+                  >
+                    ACEITAR COLETA <CheckCircle2 size={20} />
+                  </button>
+                </div>
+              ))}
+              {filteredOpenRequests.length === 0 && (
+                <div className="card text-center py-8">
+                  <p className="font-bold text-muted uppercase">NÃO HÁ PEDIDOS ABERTOS PARA ESTE FILTRO.</p>
+                </div>
+              )}
             </div>
-          )}
-        </div>
           </>
         ) : activeTab === "points" ? (
           <div className="flex flex-col gap-4">
