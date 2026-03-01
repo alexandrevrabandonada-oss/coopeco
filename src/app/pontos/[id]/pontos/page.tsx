@@ -1,4 +1,4 @@
-import { createClient } from "@supabase/supabase-js";
+import { createClient } from "@/lib/supabase";
 import {
     Coins,
     MapPin,
@@ -10,12 +10,9 @@ import { notFound } from "next/navigation";
 
 export const revalidate = 600; // 10 min cache
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-const supabase = createClient(supabaseUrl!, supabaseKey!);
-
 export default async function DropPointPointsPage({ params }: { params: Promise<{ id: string }> }) {
     const { id } = await params;
+    const supabase = createClient();
 
     // 1. Get Drop Point Info
     const { data: point } = await supabase

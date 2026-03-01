@@ -1,4 +1,4 @@
-import { createClient } from "@supabase/supabase-js";
+import { createClient } from "@/lib/supabase";
 import {
     Database,
     ShieldCheck,
@@ -12,11 +12,8 @@ import { notFound } from "next/navigation";
 
 export const revalidate = 3600;
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-const supabase = createClient(supabaseUrl!, supabaseKey!);
-
 export default async function PublicOpenDataRootPage() {
+    const supabase = createClient();
     // Para simplificar a rota raiz, listar células ativas que tenham feeds ativados para navegação
     const { data: feeds } = await supabase
         .from("eco_open_data_feeds")

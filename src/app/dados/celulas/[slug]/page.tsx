@@ -1,4 +1,4 @@
-import { createClient } from "@supabase/supabase-js";
+import { createClient } from "@/lib/supabase";
 import {
     Database,
     ShieldCheck,
@@ -11,10 +11,6 @@ import { notFound } from "next/navigation";
 
 export const revalidate = 3600;
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-const supabase = createClient(supabaseUrl!, supabaseKey!);
-
 const MAPPING: Record<string, string> = {
     'impact_weekly': 'Agregados de Impacto (Tabela)',
     'wins_weekly': 'Vitórias do Comum (Narrativas)',
@@ -24,6 +20,7 @@ const MAPPING: Record<string, string> = {
 
 export default async function CellOpenDataPage({ params }: { params: Promise<{ slug: string }> }) {
     const { slug } = await params;
+    const supabase = createClient();
 
     // Get Cell
     const { data: cell } = await supabase
