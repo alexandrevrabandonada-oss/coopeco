@@ -1,4 +1,4 @@
-import { createClient } from "@supabase/supabase-js";
+import { createClient } from "@/lib/supabase";
 import {
     Trophy,
     Leaf,
@@ -12,12 +12,9 @@ import { notFound } from "next/navigation";
 
 export const revalidate = 3600; // Cache for 1 hour
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-const supabase = createClient(supabaseUrl!, supabaseKey!);
-
 export default async function PublicCollectiveWinsPage({ params }: { params: Promise<{ slug: string }> }) {
     const { slug } = await params;
+    const supabase = createClient();
 
     // 1. Get neighborhood + cell
     const { data: nData } = await supabase

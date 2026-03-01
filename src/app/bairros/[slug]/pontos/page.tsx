@@ -1,4 +1,4 @@
-import { createClient } from "@supabase/supabase-js";
+import { createClient } from "@/lib/supabase";
 import {
     Coins,
     Leaf,
@@ -13,12 +13,9 @@ import { notFound } from "next/navigation";
 
 export const revalidate = 600; // 10 min cache
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-const supabase = createClient(supabaseUrl!, supabaseKey!);
-
 export default async function NeighborhoodPointsPage({ params }: { params: Promise<{ slug: string }> }) {
     const { slug } = await params;
+    const supabase = createClient();
 
     // 1. Get Neighborhood Info
     const { data: neighborhood } = await supabase
