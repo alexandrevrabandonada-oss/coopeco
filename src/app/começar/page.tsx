@@ -3,8 +3,9 @@
 import { createClient } from "@/lib/supabase";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-import { Rocket, ArrowRight } from "lucide-react";
+import { Rocket, ArrowRight, Waves } from "lucide-react";
 import { useAuth } from "@/contexts/auth-context";
+import Link from "next/link";
 
 export default function OnboardingStart() {
     const router = useRouter();
@@ -88,6 +89,12 @@ export default function OnboardingStart() {
             <p className="text-[10px] font-black uppercase text-muted-foreground">
                 Leva menos de 60 segundos para começar a sua primeira ação.
             </p>
+
+            <div className="mt-8 pt-6 border-t border-foreground/10 w-full text-center">
+                <Link href="/abertura" className="inline-flex items-center justify-center gap-2 text-xs font-bold uppercase hover:text-primary transition-colors">
+                    <Waves size={16} /> ENTENDA NOSSA ABERTURA POR ETAPAS (CORREDOR)
+                </Link>
+            </div>
         </div>
     );
 }

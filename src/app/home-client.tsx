@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase";
 import { Neighborhood } from "@/types/eco";
 import Link from "next/link";
-import { Recycle, ArrowRight, TrendingUp, ShieldCheck, MapPin, FileText } from "lucide-react";
+import { Recycle, ArrowRight, TrendingUp, ShieldCheck, MapPin, FileText, Waves } from "lucide-react";
 
 export default function HomeClient() {
     const [pilot, setPilot] = useState<any | null>(null);
@@ -134,14 +134,23 @@ export default function HomeClient() {
                                 </Link>
                             </div>
                         </div>
+
+                        <div className="mt-6 pt-4 border-t-2 border-foreground/10">
+                            <Link href="/abertura" className="text-[10px] font-black uppercase hover:text-primary transition-colors flex items-center gap-1 justify-center opacity-60 hover:opacity-100">
+                                <Waves size={14} /> MODELO DE CRESCIMENTO BLINDADO (A59)
+                            </Link>
+                        </div>
                     </div>
                 </section>
             )}
 
             {!loading && !pilot && (
                 <section className="mt-12">
-                    <div className="card border-dashed">
-                        <p className="font-black text-xs uppercase text-center py-4">Nenhum bairro piloto ativo no momento. Aguarde atualizações.</p>
+                    <div className="card border-dashed flex flex-col items-center gap-4 py-8">
+                        <p className="font-black text-xs uppercase text-center">A expansão da rede obedece critérios rígidos de saúde operacional (A59).</p>
+                        <Link href="/abertura" className="cta-button small bg-white text-black hover:bg-black hover:text-white">
+                            <Waves size={16} /> VER MAPA DE EXPANSÃO (CORREDORES)
+                        </Link>
                     </div>
                 </section>
             )}
