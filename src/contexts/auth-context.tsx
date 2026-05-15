@@ -58,9 +58,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         let isMounted = true
 
         if (e2eBootstrap) {
-            return () => {
-                isMounted = false
-            }
+            return () => { isMounted = false }
         }
 
         const supabase = isSupabaseConfigured ? createClient() : null
@@ -81,17 +79,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 return
             }
 
-            const { data: { session: initialSession } } = await supabase.auth.getSession()
-            if (isMounted) {
-                setSession(initialSession)
-                setUser(initialSession?.user ?? null)
-            }
+            // Safety timeout: se o Supabase travar, desbloqueia a UI após 5s
+            const timeoutId = setTimeout(() => {
+                if (isMounted) setIsLoading(false)
+            }, 5000)
 
-            if (initialSession?.user) {
-                const p = await loadProfile(initialSession.user.id)
-                if (isMounted) setProfile(p)
+            try {
+                const { data: { session: initialSession } } = await supabase.auth.getSession()
+                if (isMounted) {
+                    setSession(initialSession)
+                    setUser(initialSession?.user ?? null)
+                }
+
+                if (initialSession?.user) {
+                    const p = await loadProfile(initialSession.user.id)
+                    if (isMounted) setProfile(p)
+                }
+            } catch (err) {
+                console.warn("[auth] getSession failed:", err)
+            } finally {
+                clearTimeout(timeoutId)
+                if (isMounted) setIsLoading(false)
             }
-            if (isMounted) setIsLoading(false)
         }
 
         init()
@@ -118,9 +127,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             }
         }
 
-        return () => {
-            isMounted = false
-        }
+        return () => { isMounted = false }
     }, [e2eBootstrap])
 
     const signOut = async () => {
