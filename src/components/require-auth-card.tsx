@@ -33,7 +33,7 @@ export function RequireAuthCard({
       setError("Email ou senha incorretos.");
       setLoading(false);
     } else {
-      router.refresh();
+      window.location.reload();
     }
   }
 

@@ -27,7 +27,7 @@ export function getAuthRequirement(pathname: string): AuthRequirement {
     return { requiresAuth: true, requiresNeighborhood: true, allowedRoles: ["cooperado", "operator"] };
   }
   if (pathname === "/admin" || pathname.startsWith("/admin/")) {
-    return { requiresAuth: true, requiresNeighborhood: true, allowedRoles: ["operator"] };
+    return { requiresAuth: true, requiresNeighborhood: false, allowedRoles: ["operator"] };
   }
   if (PROTECTED_EXACT.has(pathname)) {
     return { requiresAuth: true, requiresNeighborhood: true };
