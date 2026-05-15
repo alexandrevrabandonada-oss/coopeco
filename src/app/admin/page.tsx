@@ -67,6 +67,12 @@ export default function AdminDashboard() {
                             <Link href="/admin/operacao" className="cta-button" style={{ width: "fit-content", background: "var(--accent)", color: "white" }}>
                                 ABRIR ADMIN / OPERAÇÃO <ArrowRight size={18} />
                             </Link>
+                            <Link href="/admin/eco/mapa-demanda" className="cta-button" style={{ width: "fit-content", background: "#10b981", color: "white" }}>
+                                ABRIR ADMIN / MAPA DEMANDA <ArrowRight size={18} />
+                            </Link>
+                            <Link href="/admin/eco/rotas-piloto" className="cta-button" style={{ width: "fit-content", background: "#059669", color: "white" }}>
+                                ABRIR ADMIN / ROTAS PILOTO <ArrowRight size={18} />
+                            </Link>
                         </>
                     )}
                 </div>
