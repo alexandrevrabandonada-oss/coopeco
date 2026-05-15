@@ -125,7 +125,9 @@ export default function AdminAncorasClient() {
     );
   }
 
-  if (!user || !p || p.role !== "operator") {
+  const isOperator = p?.role === "operator" || user?.app_metadata?.role === "operator";
+
+  if (!user || !isOperator) {
     return (
       <div className="card text-center py-12 animate-slide-up">
         <ShieldOff size={48} className="mx-auto mb-4 text-accent" />
