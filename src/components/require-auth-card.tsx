@@ -32,9 +32,11 @@ export function RequireAuthCard({
     if (error) {
       setError("Email ou senha incorretos.");
       setLoading(false);
-    } else {
-      window.location.reload();
     }
+    // Se sucesso: manter loading=true enquanto o auth context atualiza via onAuthStateChange.
+    // O ProtectedRouteGate vai desmontar este componente quando isAllowed=true.
+    // Safety: reset loading após 8s se nada acontecer.
+    setTimeout(() => setLoading(false), 8000);
   }
 
   return (

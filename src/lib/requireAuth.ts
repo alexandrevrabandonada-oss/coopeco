@@ -59,8 +59,12 @@ export function useRequireAuth(requirement: AuthRequirement) {
     if (requirement.requiresNeighborhood && !p?.neighborhood_id) {
       return { isLoading: false, isAllowed: false, reason: "missing_neighborhood" as const };
     }
-    if (requirement.allowedRoles && (!p || !requirement.allowedRoles.includes(p.role))) {
-      return { isLoading: false, isAllowed: false, reason: "forbidden_role" as const };
+    if (requirement.allowedRoles) {
+      // Use profile role if available, otherwise fall back to app_metadata.role (set directly on Supabase)
+      const effectiveRole = (p?.role ?? user.app_metadata?.role ?? null) as Role | null;
+      if (!effectiveRole || !requirement.allowedRoles.includes(effectiveRole)) {
+        return { isLoading: false, isAllowed: false, reason: "forbidden_role" as const };
+      }
     }
     return { isLoading: false, isAllowed: true, reason: null as null };
   }, [isLoading, p, requirement.allowedRoles, requirement.requiresAuth, requirement.requiresNeighborhood, user]);
